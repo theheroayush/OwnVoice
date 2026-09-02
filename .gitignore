@@ -1,0 +1,21 @@
+# Environment & Secrets
+.env
+config.json
+*.pem
+*.key
+
+# Logs
+*.log
+app.log
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.spec
+
+# System
+.DS_Store
+Thumbs.db

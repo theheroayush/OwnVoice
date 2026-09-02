@@ -1,0 +1,16 @@
+{
+    "google_api_key": "YOUR_GEMINI_API_KEY_HERE",
+    "model": "gemini-3.5-flash-lite",
+    "hotkey": "f8",
+    "hotkey_mode": "toggle",
+    "dictation_mode": "smart_flow",
+    "custom_instructions": "",
+    "sound_effects": false,
+    "input_device_index": 9,
+    "sample_rate": 48000,
+    "overlay_position": "bottom_center",
+    "auto_paste": true,
+    "save_history": true,
+    "history_limit": 100,
+    "theme": "dark"
+}
