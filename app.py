@@ -10,6 +10,8 @@ from core.ai_engine import AIEngine
 from core.injector import CursorInjector
 from core.hotkey_manager import HotkeyManager
 from core.sound_effects import sound_effects
+from core.context_detector import ContextDetector
+from core.snippet_engine import SnippetEngine
 from ui.floating_widget import FloatingWidget
 from ui.settings_window import SettingsWindow
 from ui.tray_icon import TrayIcon
@@ -26,14 +28,17 @@ def log_event(msg: str):
     except Exception:
         pass
 
-class WisprFlowApp:
+class OwnVoiceApp:
     def __init__(self):
-        log_event("Starting Wispr Flow Voice Engine...")
+        log_event("Starting OwnVoice Engine...")
         self.config = config_manager
         self.audio_recorder = AudioRecorder()
         self.ai_engine = AIEngine(self.config)
         self.injector = CursorInjector(self.config)
+        self.snippet_engine = SnippetEngine(self.config)
         self.overlay_visible = True
+        self.active_context_mode = "smart_flow"
+        self.active_context_label = ""
 
         self.overlay = FloatingWidget(
             get_volume_fn=self.audio_recorder.get_current_volume,
@@ -49,6 +54,7 @@ class WisprFlowApp:
             config_manager=self.config,
             ai_engine=self.ai_engine,
             audio_recorder=self.audio_recorder,
+            snippet_engine=self.snippet_engine,
             on_settings_changed=self.reload_settings
         )
 
@@ -70,16 +76,24 @@ class WisprFlowApp:
         self.hotkey_manager.start()
 
     def on_recording_start(self):
-        log_event("Recording started (F8/click)...")
+        # 1. Capture target window
         self.injector.update_target_hwnd()
+
+        # 2. App-Aware Context Detection
+        if self.config.get("auto_context", True):
+            self.active_context_mode, self.active_context_label = ContextDetector.detect_tone(self.injector.last_target_hwnd)
+        else:
+            self.active_context_mode = self.config.get("dictation_mode", "smart_flow")
+            self.active_context_label = ""
+
+        log_event(f"Recording started (F8/click) [Context: {self.active_context_label} -> {self.active_context_mode}]")
 
         if self.config.get("sound_effects", False):
             sound_effects.play_start()
         
-        # Ensure overlay is visible when recording begins
         if self.overlay.root:
             self.overlay.root.after(0, self.overlay.show)
-            self.overlay.root.after(0, self.overlay.show_recording)
+            self.overlay.root.after(0, lambda: self.overlay.show_recording(self.active_context_label))
             
         try:
             dev_idx = self.config.get("input_device_index", 9)
@@ -108,7 +122,8 @@ class WisprFlowApp:
                         self.overlay.root.after(0, self.overlay.dock)
                     return
 
-                text, latency = self.ai_engine.transcribe_audio(audio_bytes)
+                # AI Transcription with App-Aware Tone
+                text, latency = self.ai_engine.transcribe_audio(audio_bytes, mode=self.active_context_mode)
                 log_event(f"Gemini transcription ({int(latency*1000)}ms): '{text}'")
 
                 if not text:
@@ -117,22 +132,27 @@ class WisprFlowApp:
                         self.overlay.root.after(0, lambda: self.overlay.show_error("No speech"))
                     return
 
+                # Voice Snippets Expansion
+                expanded_text = self.snippet_engine.expand(text)
+                if expanded_text != text:
+                    log_event(f"Snippets expanded: '{expanded_text}'")
+
                 self.config.add_history_entry({
                     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "text": text,
-                    "mode": self.config.get("dictation_mode", "smart_flow"),
+                    "text": expanded_text,
+                    "mode": self.active_context_mode,
                     "latency": latency
                 })
 
                 # Inject text into active search box / document
-                self.injector.inject_text(text)
-                log_event(f"Successfully injected: '{text}'")
+                self.injector.inject_text(expanded_text)
+                log_event(f"Successfully injected: '{expanded_text[:40]}'")
                 
                 if self.config.get("sound_effects", False):
                     sound_effects.play_success()
 
                 if self.overlay.root:
-                    self.overlay.root.after(0, lambda: self.overlay.show_success(text))
+                    self.overlay.root.after(0, lambda: self.overlay.show_success(expanded_text))
 
             except Exception as e:
                 log_event(f"Error during transcription: {e}")
@@ -173,7 +193,7 @@ class WisprFlowApp:
             self.overlay.root.after(0, self.settings_ui.show)
 
     def exit_app(self):
-        log_event("Exiting Wispr Flow...")
+        log_event("Exiting OwnVoice...")
         self.hotkey_manager.stop()
         self.tray.stop()
         if self.overlay.root:
@@ -187,5 +207,5 @@ class WisprFlowApp:
         self.overlay.root.mainloop()
 
 if __name__ == "__main__":
-    app = WisprFlowApp()
+    app = OwnVoiceApp()
     app.run()

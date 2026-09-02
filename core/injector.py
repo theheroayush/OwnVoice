@@ -44,23 +44,32 @@ class CursorInjector:
 
     def inject_text(self, text: str):
         """
-        Injects text into whatever search box, document, or app the user was focused on.
-        Uses dual-layer strategy: Active Window Focus Restoration + Clipboard Ctrl+V + pynput fallback.
+        Injects text into active search box or document with clipboard lock recovery.
         """
         if not text:
             return
-
-        print(f"[INJECTOR] Starting injection for: '{text}' (Target HWND: {self.last_target_hwnd})")
 
         # 1. Re-focus the target window / search box
         self.refocus_target()
         time.sleep(0.06)
 
-        # 2. Put text on clipboard
-        try:
-            pyperclip.copy(text)
-        except Exception as e:
-            print(f"Clipboard copy error: {e}")
+        # 2. Put text on clipboard with retry backoff
+        copied = False
+        for attempt in range(3):
+            try:
+                pyperclip.copy(text)
+                copied = True
+                break
+            except Exception:
+                time.sleep(0.03)
+
+        if not copied:
+            # Fallback: Type directly with keyboard controller if clipboard is locked
+            try:
+                kb.type(text)
+                return
+            except Exception:
+                pass
 
         time.sleep(0.04)
 
@@ -74,12 +83,10 @@ class CursorInjector:
         except Exception as e:
             print(f"Win32 keybd_event paste error: {e}")
 
-        # Fallback with pynput controller
+        # Secondary fallback with pynput controller
         try:
             with kb.pressed(Key.ctrl):
                 kb.press('v')
                 kb.release('v')
         except Exception as e:
             print(f"pynput paste error: {e}")
-
-        print(f"[INJECTOR] Injection completed successfully for '{text[:40]}'")

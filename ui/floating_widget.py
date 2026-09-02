@@ -24,18 +24,17 @@ class FloatingWidget:
         self.canvas = None
         self.state = "DOCKED"  # DOCKED, RECORDING, PROCESSING, SUCCESS, ERROR
         self.status_text = ""
+        self.context_label = ""
         self.is_running = False
         self.anim_thread = None
         self.focus_thread = None
         self.pulse_phase = 0.0
         self.hide_timer = None
         
-        # Dimensions
-        self.width = 160
+        self.width = 165
         self.height = 34
         self.hwnd = None
         
-        # Dragging state
         self.drag_start_x = 0
         self.drag_start_y = 0
         self.is_dragging = False
@@ -47,7 +46,6 @@ class FloatingWidget:
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         
-        # Transparency setup
         self.root.config(bg="#000001")
         self.root.wm_attributes("-transparentcolor", "#000001")
 
@@ -80,7 +78,6 @@ class FloatingWidget:
         )
         self.canvas.pack(fill="both", expand=True)
         
-        # Mouse Bindings for Dragging vs Clicking
         self.canvas.bind("<ButtonPress-1>", self._on_mouse_down)
         self.canvas.bind("<B1-Motion>", self._on_mouse_drag)
         self.canvas.bind("<ButtonRelease-1>", self._on_mouse_up)
@@ -109,25 +106,20 @@ class FloatingWidget:
     def _on_mouse_up(self, event):
         if self.is_dragging:
             self.is_dragging = False
-            # Save dragged position
             if self.config:
                 self.config.set("overlay_x", self.root.winfo_x(), save=False)
                 self.config.set("overlay_y", self.root.winfo_y(), save=True)
             return
 
-        # Check if clicked close 'X' button (last 24 pixels on right)
         if event.x >= self.width - 26:
             if self.state == "RECORDING":
-                # Cancel recording
                 if self.on_cancel:
                     self.on_cancel()
                 self.dock()
             else:
-                # Close / Hide pill to tray
                 self.hide()
             return
 
-        # Otherwise: Toggle Dictation
         if self.injector:
             self.injector.refocus_target()
         if self.on_click_toggle:
@@ -146,12 +138,12 @@ class FloatingWidget:
 
     def _show_context_menu(self, event):
         menu = tk.Menu(self.root, tearoff=0, bg="#0E131F", fg="#F8FAFC", activebackground="#2563EB", activeforeground="#FFFFFF")
-        menu.add_command(label="⚙️ Settings", command=self.on_open_settings if self.on_open_settings else None)
+        menu.add_command(label="⚙️ Settings & Snippets", command=self.on_open_settings if self.on_open_settings else None)
         if self.state == "RECORDING":
             menu.add_command(label="🚫 Cancel Recording", command=self._cancel_and_dock)
         menu.add_command(label="👁️ Hide to Tray", command=self.hide)
         menu.add_separator()
-        menu.add_command(label="❌ Exit VoiceTranscriber", command=self.root.quit)
+        menu.add_command(label="❌ Exit OwnVoice", command=self.root.quit)
         menu.tk_popup(event.x_root, event.y_root)
 
     def _cancel_and_dock(self):
@@ -179,31 +171,20 @@ class FloatingWidget:
         close_color = "#EF4444" if self.hovering_close else "#64748B"
 
         if self.state == "DOCKED":
-            # Obsidian Glass Capsule
             self._create_rounded_rect(2, 2, w - 3, h - 3, r, fill="#0A0D14", outline="#1E2638", width=1.2)
-            
-            # Subtle glowing cyan mic dot
             self.canvas.create_oval(10, h//2 - 3.5, 17, h//2 + 3.5, fill="#38BDF8", outline="")
-            
-            # Text
             self.canvas.create_text(23, h//2, text="OwnVoice", anchor="w", fill="#E2E8F0", font=("Segoe UI", 9, "bold"))
             
-            # Shortcut pill badge
             self.canvas.create_rectangle(w - 54, 7, w - 28, h - 7, fill="#161F30", outline="#253248", width=1)
             self.canvas.create_text(w - 41, h//2, text="F8", fill="#38BDF8", font=("Segoe UI", 8, "bold"))
-
-            # Cancel / Close '✕' Button
             self.canvas.create_text(w - 15, h//2, text="✕", fill=close_color, font=("Segoe UI", 9, "bold"))
 
         elif self.state == "RECORDING":
-            # Glowing Dark Slate with Cyan Neon Border
             self._create_rounded_rect(2, 2, w - 3, h - 3, r, fill="#080C14", outline="#0EA5E9", width=1.5)
             
-            # Pulsing red recording dot
             pulse_size = 3.5 + math.sin(self.pulse_phase * 1.5) * 0.8
             self.canvas.create_oval(11 - pulse_size, h//2 - pulse_size, 11 + pulse_size, h//2 + pulse_size, fill="#EF4444", outline="")
             
-            # Slender aesthetic waveform bars
             vol = self.get_volume_fn()
             bar_start_x = 21
             for i in range(4):
@@ -212,16 +193,12 @@ class FloatingWidget:
                 bx = bar_start_x + i * 4.5
                 self.canvas.create_line(bx, h//2 - bar_h//2, bx, h//2 + bar_h//2, fill="#38BDF8", width=2, capstyle="round")
 
-            self.canvas.create_text(44, h//2, text="Listening...", anchor="w", fill="#F8FAFC", font=("Segoe UI", 9, "bold"))
-
-            # Cancel '✕' Button on recording
+            ctx = f" • {self.context_label}" if self.context_label else ""
+            self.canvas.create_text(44, h//2, text=f"Listening{ctx}", anchor="w", fill="#F8FAFC", font=("Segoe UI", 8, "bold"))
             self.canvas.create_text(w - 15, h//2, text="✕", fill=close_color, font=("Segoe UI", 9, "bold"))
 
         elif self.state == "PROCESSING":
-            # Purple glow capsule
             self._create_rounded_rect(2, 2, w - 3, h - 3, r, fill="#120E24", outline="#8B5CF6", width=1.5)
-            
-            # Undulating purple loader dots
             dot_start_x = 14
             for i in range(3):
                 offset = math.sin(self.pulse_phase * 2.5 + i * 1.2) * 2.5
@@ -234,13 +211,11 @@ class FloatingWidget:
             self.canvas.create_text(w - 15, h//2, text="✕", fill=close_color, font=("Segoe UI", 9, "bold"))
 
         elif self.state == "SUCCESS":
-            # Emerald success capsule
             self._create_rounded_rect(2, 2, w - 3, h - 3, r, fill="#061F17", outline="#10B981", width=1.5)
             self.canvas.create_text(14, h//2, text="✓", fill="#10B981", font=("Segoe UI", 10, "bold"))
             self.canvas.create_text(26, h//2, text="Typed", anchor="w", fill="#ECFDF5", font=("Segoe UI", 9, "bold"))
 
         elif self.state == "ERROR":
-            # Amber notice capsule
             self._create_rounded_rect(2, 2, w - 3, h - 3, r, fill="#1F1306", outline="#F59E0B", width=1.5)
             self.canvas.create_text(13, h//2, text="•", fill="#F59E0B", font=("Segoe UI", 12, "bold"))
             msg = self.status_text or "No speech"
@@ -248,24 +223,17 @@ class FloatingWidget:
 
     def _create_rounded_rect(self, x1, y1, x2, y2, r=17, **kwargs):
         points = (
-            x1 + r, y1,
-            x2 - r, y1,
-            x2, y1,
-            x2, y1 + r,
-            x2, y2 - r,
-            x2, y2,
-            x2 - r, y2,
-            x1 + r, y2,
-            x1, y2,
-            x1, y2 - r,
-            x1, y1 + r,
-            x1, y1
+            x1 + r, y1, x2 - r, y1, x2, y1, x2, y1 + r,
+            x2, y2 - r, x2, y2, x2 - r, y2, x1 + r, y2,
+            x1, y2, x1, y2 - r, x1, y1 + r, x1, y1
         )
         return self.canvas.create_polygon(points, smooth=True, **kwargs)
 
-    def show_recording(self):
+    def show_recording(self, context_label=""):
         self.state = "RECORDING"
-        self._resize(150)
+        self.context_label = context_label
+        new_w = 175 if context_label else 155
+        self._resize(new_w)
 
     def show_processing(self):
         self.state = "PROCESSING"
@@ -286,7 +254,8 @@ class FloatingWidget:
 
     def dock(self):
         self.state = "DOCKED"
-        self._resize(160)
+        self.context_label = ""
+        self._resize(165)
 
     def _resize(self, new_w):
         self.width = new_w

@@ -11,22 +11,33 @@ DICTATION_PROMPTS = {
         "Apply proper punctuation, capitalization, and formatting. "
         "Output ONLY the transcribed words with zero preamble, no quotes, and no markdown fences."
     ),
-    "verbatim": (
-        "Transcribe the audio word-for-word exactly as spoken. "
-        "Output ONLY the verbatim transcription."
-    ),
     "code": (
-        "Transcribe the spoken audio into code, terminal commands, or variable names. "
-        "Format identifiers in appropriate casing (camelCase, snake_case), wrap code in backticks. "
-        "Output ONLY the code."
+        "You are a coding voice assistant. Transcribe the spoken audio into precise code, "
+        "terminal commands, or variable names. Format identifiers in appropriate casing "
+        "(camelCase, snake_case, PascalCase, kebab-case), wrap inline code in backticks. "
+        "Output ONLY the code or commands with zero explanations."
+    ),
+    "formal_email": (
+        "You are an executive email assistant. Transcribe the spoken audio into a professional, "
+        "well-structured email message with appropriate greetings, body paragraphs, and sign-offs. "
+        "Output ONLY the clean email text."
+    ),
+    "formal_document": (
+        "You are an executive documentation assistant. Transcribe the spoken audio into structured, "
+        "formal prose suitable for MS Word or Google Docs. Format bullet points (- Item) and "
+        "paragraphs cleanly. Output ONLY the document text."
+    ),
+    "chat": (
+        "You are a real-time messaging voice assistant for Slack, WhatsApp, and Discord. "
+        "Transcribe spoken audio into friendly, natural chat messages. Preserve emojis if mentioned, "
+        "keep casual phrasing and clean conversational punctuation. Output ONLY the chat message."
+    ),
+    "verbatim": (
+        "Transcribe the audio word-for-word exactly as spoken. Output ONLY the verbatim transcription."
     ),
     "bullet_notes": (
         "Transcribe the spoken audio into concise markdown bullet points (- Item). "
         "Output ONLY the bulleted list."
-    ),
-    "formal_email": (
-        "Transcribe the spoken audio into a professional, well-formatted email message. "
-        "Output ONLY the email text."
     )
 }
 

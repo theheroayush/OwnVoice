@@ -7,7 +7,13 @@
 ## ✨ Features
 
 - **⚡ Zero-Lag Wispr Flow Experience**: Press `F8` anywhere in Windows, speak naturally, and text is instantly typed at your active cursor.
-- **🎯 Search Box & Caret Focus Memory**: Automatically remembers and re-focuses your active search box or document (Chrome, YouTube, MS Word, Slack, VS Code, Windows Search) before typing.
+- **🎯 App-Aware Tone Detection**: 100% native Win32 context awareness automatically adjusts output formatting based on your active window:
+  - **VS Code / Terminal / Cursor** $\rightarrow$ Code casing (`camelCase`, `snake_case`), backticks, shell flags.
+  - **MS Word / Docs** $\rightarrow$ Structured executive paragraphs and bullet points.
+  - **Outlook / Gmail** $\rightarrow$ Formal business email formatting.
+  - **Slack / WhatsApp / Discord** $\rightarrow$ Friendly, conversational messaging tone.
+- **✂️ Voice Snippets & Text Expander**: Say spoken triggers (e.g. *"my email"*, *"meeting link"*, *"sign off"*) to instantly expand into complex links, emails, or templates.
+- **🎯 Caret & Search Box Focus Memory**: Automatically remembers and re-focuses your active search box or document before typing.
 - **🔇 100% Silent Operation**: No beeps, chimes, or audio interruptions.
 - **🖱️ Draggable Capsule**: Minimalist obsidian floating capsule with live cyan soundwave visualization, freely draggable anywhere across your screens.
 - **✕ Dedicated Controls**: Cancel recording or hide to tray with one click.
