@@ -53,9 +53,9 @@ DICTATION_PROMPTS = {
 
 FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
     "gemini-3.5-flash",
-    "gemini-flash-lite-latest"
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash"
 ]
 
 SILENCE_ARTIFACTS = {
@@ -67,7 +67,7 @@ SILENCE_ARTIFACTS = {
 class AIEngine:
     def __init__(self, config_manager):
         self.config = config_manager
-        self.working_model = "gemini-3.5-flash-lite"
+        self.working_model = self.config.get("model", "gemini-3.5-flash-lite")
         self.session = requests.Session()
         adapter = HTTPAdapter(pool_connections=5, pool_maxsize=10)
         self.session.mount("https://", adapter)
@@ -174,56 +174,6 @@ class AIEngine:
                 last_error = str(e)
 
         raise RuntimeError(last_error or "Unable to transcribe audio with Gemini models.")
-
-    def polish_text(self, raw_draft: str, mode: str = None) -> Tuple[str, float]:
-        """
-        Ultra-low latency text-first polishing pass (sends only ~150 bytes instead of 1MB audio).
-        Cleans filler words, applies casing/punctuation, and polishes according to active app context.
-        """
-        if not raw_draft or not raw_draft.strip():
-            return "", 0.0
-
-        start_time = time.time()
-        api_key = self.config.get("google_api_key", "").strip()
-        if not api_key:
-            return raw_draft, 0.0
-
-        if not mode:
-            mode = self.config.get("dictation_mode", "smart_flow")
-
-        system_instruction = DICTATION_PROMPTS.get(mode, DICTATION_PROMPTS["smart_flow"])
-        custom_instructions = self.config.get("custom_instructions", "").strip()
-        if custom_instructions:
-            system_instruction += f"\n\nUser Vocabulary / Jargon:\n{custom_instructions}"
-
-        prompt = (
-            f"{system_instruction}\n\n"
-            f"Spoken Draft to Polish:\n{raw_draft}"
-        )
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.working_model}:generateContent?key={api_key}"
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.0,
-                "maxOutputTokens": 512
-            }
-        }
-
-        try:
-            resp = self.session.post(url, json=payload, timeout=8)
-            latency = time.time() - start_time
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        cleaned = self._clean_transcript(parts[0].get("text", ""))
-                        return cleaned or raw_draft, latency
-            return raw_draft, latency
-        except Exception:
-            return raw_draft, time.time() - start_time
 
     def test_connection(self, api_key: str = None) -> Tuple[bool, str, float]:
         if not api_key:
