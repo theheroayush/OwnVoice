@@ -1,9 +1,14 @@
 import os
+import sys
 import json
 from pathlib import Path
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+
 CONFIG_FILE = BASE_DIR / "config.json"
 HISTORY_FILE = BASE_DIR / "history.json"
 ENV_FILE = BASE_DIR / ".env"
@@ -12,19 +17,26 @@ if ENV_FILE.exists():
     load_dotenv(ENV_FILE)
 
 DEFAULT_CONFIG = {
-    "google_api_key": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "",
-    "model": "gemini-3.5-transcribe",
+    "google_api_key": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "AQ.Ab8RN6JVp6KVzuryq8BuUZLBYBuUJCNqwECacgdSMUegi5EblA",
+    "model": "gemini-3.5-flash-lite",
     "hotkey": "f8",
     "hotkey_mode": "toggle",
     "dictation_mode": "smart_flow",
+    "auto_context": True,
     "custom_instructions": "",
-    "sound_effects": True,
-    "input_device_index": None,
+    "sound_effects": False,
+    "input_device_index": 9,
+    "sample_rate": 48000,
     "overlay_position": "bottom_center",
     "auto_paste": True,
     "save_history": True,
     "history_limit": 100,
-    "theme": "dark"
+    "theme": "dark",
+    "snippets": {
+        "my portfolio": "https://ayushupadhyay.com",
+        "meeting link": "https://cal.com/ayush",
+        "my email": "ayush@example.com"
+    }
 }
 
 class ConfigManager:

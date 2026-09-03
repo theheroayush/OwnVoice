@@ -5,18 +5,40 @@ import time
 import math
 from typing import Callable
 
+# Enable Per-Monitor V2 DPI awareness on Windows 11/10
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
 GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_TOPMOST = 0x00000008
 
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_NOZORDER = 0x0004
+SWP_NOACTIVATE = 0x0010
+SWP_FRAMECHANGED = 0x0020
+SWP_SHOWWINDOW = 0x0040
+
+SM_XVIRTUALSCREEN = 76
+SM_YVIRTUALSCREEN = 77
+SM_CXVIRTUALSCREEN = 78
+SM_CYVIRTUALSCREEN = 79
+
 class FloatingWidget:
-    def __init__(self, get_volume_fn: Callable[[], float], on_click_toggle: Callable[[], None] = None, on_open_settings: Callable[[], None] = None, on_cancel: Callable[[], None] = None, on_hide: Callable[[], None] = None, injector = None, config_manager = None):
+    def __init__(self, get_volume_fn: Callable[[], float], on_click_toggle: Callable[[], None] = None, on_open_settings: Callable[[], None] = None, on_cancel: Callable[[], None] = None, on_hide: Callable[[], None] = None, on_exit: Callable[[], None] = None, injector = None, config_manager = None):
         self.get_volume_fn = get_volume_fn
         self.on_click_toggle = on_click_toggle
         self.on_open_settings = on_open_settings
         self.on_cancel = on_cancel
         self.on_hide = on_hide
+        self.on_exit = on_exit
         self.injector = injector
         self.config = config_manager
         
@@ -37,8 +59,26 @@ class FloatingWidget:
         
         self.drag_start_x = 0
         self.drag_start_y = 0
+        self.win_start_x = 0
+        self.win_start_y = 0
         self.is_dragging = False
         self.hovering_close = False
+
+    def _clamp_coordinates(self, x, y):
+        """Keep capsule strictly within virtual multi-monitor desktop boundaries."""
+        try:
+            user32 = ctypes.windll.user32
+            vx = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+            vy = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+            vw = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+            vh = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+            if vw > 0 and vh > 0:
+                clamped_x = max(vx, min(vx + vw - self.width, x))
+                clamped_y = max(vy, min(vy + vh - self.height, y))
+                return clamped_x, clamped_y
+        except Exception:
+            pass
+        return x, y
 
     def _create_window(self):
         self.root = tk.Tk()
@@ -49,10 +89,24 @@ class FloatingWidget:
         self.root.config(bg="#000001")
         self.root.wm_attributes("-transparentcolor", "#000001")
 
+        # Must call update_idletasks() so Tk creates the underlying Win32 window
+        # before querying HWND or applying extended window styles
         try:
-            self.hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+            self.root.update_idletasks()
+            raw_id = self.root.winfo_id()
+            parent_hwnd = ctypes.windll.user32.GetParent(raw_id)
+            self.hwnd = parent_hwnd if (parent_hwnd and ctypes.windll.user32.IsWindow(parent_hwnd)) else raw_id
+            
             ex_style = ctypes.windll.user32.GetWindowLongW(self.hwnd, GWL_EXSTYLE)
-            ctypes.windll.user32.SetWindowLongW(self.hwnd, GWL_EXSTYLE, ex_style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST)
+            ctypes.windll.user32.SetWindowLongW(
+                self.hwnd,
+                GWL_EXSTYLE,
+                ex_style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST
+            )
+            ctypes.windll.user32.SetWindowPos(
+                self.hwnd, -1, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED
+            )
             if self.injector:
                 self.injector.set_overlay_hwnd(self.hwnd)
         except Exception:
@@ -66,6 +120,7 @@ class FloatingWidget:
         
         x = saved_x if saved_x is not None else (screen_w - self.width) // 2
         y = saved_y if saved_y is not None else screen_h - self.height - 40
+        x, y = self._clamp_coordinates(x, y)
         self.root.geometry(f"{self.width}x{self.height}+{x}+{y}")
 
         self.canvas = tk.Canvas(
@@ -97,10 +152,9 @@ class FloatingWidget:
     def _on_mouse_drag(self, event):
         dx = event.x_root - self.drag_start_x
         dy = event.y_root - self.drag_start_y
-        if abs(dx) > 3 or abs(dy) > 3:
+        if math.hypot(dx, dy) >= 6.0:
             self.is_dragging = True
-            new_x = self.win_start_x + dx
-            new_y = self.win_start_y + dy
+            new_x, new_y = self._clamp_coordinates(self.win_start_x + dx, self.win_start_y + dy)
             self.root.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
 
     def _on_mouse_up(self, event):
@@ -112,7 +166,7 @@ class FloatingWidget:
             return
 
         if event.x >= self.width - 26:
-            if self.state == "RECORDING":
+            if self.state in ("RECORDING", "PROCESSING"):
                 if self.on_cancel:
                     self.on_cancel()
                 self.dock()
@@ -139,11 +193,12 @@ class FloatingWidget:
     def _show_context_menu(self, event):
         menu = tk.Menu(self.root, tearoff=0, bg="#0E131F", fg="#F8FAFC", activebackground="#2563EB", activeforeground="#FFFFFF")
         menu.add_command(label="⚙️ Settings & Snippets", command=self.on_open_settings if self.on_open_settings else None)
-        if self.state == "RECORDING":
-            menu.add_command(label="🚫 Cancel Recording", command=self._cancel_and_dock)
+        if self.state in ("RECORDING", "PROCESSING"):
+            menu.add_command(label="🚫 Cancel Dictation", command=self._cancel_and_dock)
         menu.add_command(label="👁️ Hide to Tray", command=self.hide)
         menu.add_separator()
-        menu.add_command(label="❌ Exit OwnVoice", command=self.root.quit)
+        exit_cmd = self.on_exit if self.on_exit else (self.root.quit if self.root else None)
+        menu.add_command(label="❌ Exit OwnVoice", command=exit_cmd)
         menu.tk_popup(event.x_root, event.y_root)
 
     def _cancel_and_dock(self):
@@ -154,11 +209,22 @@ class FloatingWidget:
     def hide(self):
         if self.root:
             self.root.withdraw()
+        if self.on_hide:
+            self.on_hide()
 
     def show(self):
         if self.root:
             self.root.deiconify()
             self.root.lift()
+            self.root.attributes("-topmost", True)
+            if self.hwnd:
+                try:
+                    ctypes.windll.user32.SetWindowPos(
+                        self.hwnd, -1, 0, 0, 0, 0,
+                        SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+                    )
+                except Exception:
+                    pass
 
     def _draw_pill(self):
         if not self.canvas:
@@ -229,23 +295,35 @@ class FloatingWidget:
         )
         return self.canvas.create_polygon(points, smooth=True, **kwargs)
 
+    def _clear_hide_timer(self):
+        if self.hide_timer and self.root:
+            try:
+                self.root.after_cancel(self.hide_timer)
+            except Exception:
+                pass
+            self.hide_timer = None
+
     def show_recording(self, context_label=""):
+        self._clear_hide_timer()
         self.state = "RECORDING"
         self.context_label = context_label
         new_w = 175 if context_label else 155
         self._resize(new_w)
 
     def show_processing(self):
+        self._clear_hide_timer()
         self.state = "PROCESSING"
         self._resize(140)
 
     def show_success(self, text=""):
+        self._clear_hide_timer()
         self.state = "SUCCESS"
         self._resize(110)
         if self.root:
             self.hide_timer = self.root.after(1400, self.dock)
 
     def show_error(self, message="No speech"):
+        self._clear_hide_timer()
         self.state = "ERROR"
         self.status_text = message
         self._resize(135)
@@ -253,6 +331,7 @@ class FloatingWidget:
             self.hide_timer = self.root.after(2000, self.dock)
 
     def dock(self):
+        self._clear_hide_timer()
         self.state = "DOCKED"
         self.context_label = ""
         self._resize(165)
@@ -295,3 +374,13 @@ class FloatingWidget:
         self.anim_thread.start()
         self.focus_thread = threading.Thread(target=self._focus_tracker_loop, daemon=True)
         self.focus_thread.start()
+
+    def destroy(self):
+        self.is_running = False
+        self._clear_hide_timer()
+        if self.root:
+            try:
+                self.root.destroy()
+            except Exception:
+                pass
+            self.root = None

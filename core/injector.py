@@ -1,92 +1,316 @@
+import os
 import time
 import ctypes
 from ctypes import wintypes
-import pyperclip
-from pynput.keyboard import Controller, Key
+from typing import Optional
+from pynput.keyboard import Controller
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
+user32 = ctypes.WinDLL("user32")
+kernel32 = ctypes.WinDLL("kernel32")
 kb = Controller()
 
+INPUT_KEYBOARD = 1
 VK_CONTROL = 0x11
 VK_V = 0x56
+VK_MENU = 0x12
 KEYEVENTF_KEYUP = 0x0002
+KEYEVENTF_UNICODE = 0x0004
+CF_UNICODETEXT = 13
+GMEM_MOVEABLE = 0x0002
+SW_RESTORE = 9
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    ]
+
+class KEYBDINPUT(ctypes.Structure):
+    _fields_ = [
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t),
+    ]
+
+class HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", wintypes.DWORD),
+        ("wParamL", wintypes.WORD),
+        ("wParamH", wintypes.WORD),
+    ]
+
+class _INPUT_UNION(ctypes.Union):
+    _fields_ = [
+        ("mi", MOUSEINPUT),
+        ("ki", KEYBDINPUT),
+        ("hi", HARDWAREINPUT),
+    ]
+
+class INPUT(ctypes.Structure):
+    _anonymous_ = ("u",)
+    _fields_ = [
+        ("type", wintypes.DWORD),
+        ("u", _INPUT_UNION),
+    ]
+
+user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+user32.SendInput.restype = wintypes.UINT
+user32.OpenClipboard.argtypes = [wintypes.HWND]
+user32.OpenClipboard.restype = wintypes.BOOL
+user32.CloseClipboard.argtypes = []
+user32.CloseClipboard.restype = wintypes.BOOL
+user32.EmptyClipboard.argtypes = []
+user32.EmptyClipboard.restype = wintypes.BOOL
+user32.GetClipboardData.argtypes = [wintypes.UINT]
+user32.GetClipboardData.restype = wintypes.HANDLE
+user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+user32.SetClipboardData.restype = wintypes.HANDLE
+user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+
+kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+kernel32.GlobalLock.restype = wintypes.LPVOID
+kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+kernel32.GlobalUnlock.restype = wintypes.BOOL
+kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+kernel32.GlobalFree.restype = wintypes.HGLOBAL
+
+user32.GetForegroundWindow.argtypes = []
+user32.GetForegroundWindow.restype = wintypes.HWND
+user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+user32.AttachThreadInput.restype = wintypes.BOOL
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.SetForegroundWindow.restype = wintypes.BOOL
+user32.BringWindowToTop.argtypes = [wintypes.HWND]
+user32.BringWindowToTop.restype = wintypes.BOOL
+user32.IsWindow.argtypes = [wintypes.HWND]
+user32.IsWindow.restype = wintypes.BOOL
+user32.IsIconic.argtypes = [wintypes.HWND]
+user32.IsIconic.restype = wintypes.BOOL
+user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.ShowWindow.restype = wintypes.BOOL
+user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+user32.keybd_event.restype = None
+kernel32.GetCurrentThreadId.argtypes = []
+kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 
 class CursorInjector:
-    def __init__(self, config_manager):
+    def __init__(self, config_manager=None):
         self.config = config_manager
-        self.last_target_hwnd = None
-        self.overlay_hwnd = None
+        self.last_target_hwnd: Optional[int] = None
+        self.overlay_hwnd: Optional[int] = None
+        self._clip_fallback_text = ""
 
-    def set_overlay_hwnd(self, hwnd):
+    def set_overlay_hwnd(self, hwnd: int):
         self.overlay_hwnd = hwnd
 
-    def update_target_hwnd(self, hwnd=None):
+    def update_target_hwnd(self, hwnd: Optional[int] = None) -> bool:
         if hwnd is None:
             hwnd = user32.GetForegroundWindow()
-        if hwnd != 0 and hwnd != self.overlay_hwnd:
-            self.last_target_hwnd = hwnd
+        if not hwnd or not user32.IsWindow(hwnd):
+            return False
+        if hwnd == self.overlay_hwnd:
+            return False
 
-    def refocus_target(self):
-        """Brings the target search box / document window back to the absolute foreground."""
-        if self.last_target_hwnd and user32.IsWindow(self.last_target_hwnd):
-            try:
-                cur_thread = kernel32.GetCurrentThreadId()
-                target_thread = user32.GetWindowThreadProcessId(self.last_target_hwnd, None)
-                
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == os.getpid():
+            return False
+
+        self.last_target_hwnd = hwnd
+        return True
+
+    def refocus_target(self) -> bool:
+        if not self.last_target_hwnd or not user32.IsWindow(self.last_target_hwnd):
+            return False
+
+        try:
+            cur_thread = kernel32.GetCurrentThreadId()
+            fg_hwnd = user32.GetForegroundWindow()
+            fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
+            target_thread = user32.GetWindowThreadProcessId(self.last_target_hwnd, None)
+
+            attached_fg = False
+            if fg_thread and fg_thread != cur_thread:
+                user32.AttachThreadInput(cur_thread, fg_thread, True)
+                attached_fg = True
+
+            attached_target = False
+            if target_thread and target_thread != cur_thread:
                 user32.AttachThreadInput(cur_thread, target_thread, True)
-                user32.SetForegroundWindow(self.last_target_hwnd)
-                user32.BringWindowToTop(self.last_target_hwnd)
-                user32.SetFocus(self.last_target_hwnd)
+                attached_target = True
+
+            user32.keybd_event(VK_MENU, 0, 0, 0)
+            user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+
+            if user32.IsIconic(self.last_target_hwnd):
+                user32.ShowWindow(self.last_target_hwnd, SW_RESTORE)
+
+            user32.SetForegroundWindow(self.last_target_hwnd)
+            user32.BringWindowToTop(self.last_target_hwnd)
+
+            if attached_fg:
+                user32.AttachThreadInput(cur_thread, fg_thread, False)
+            if attached_target:
                 user32.AttachThreadInput(cur_thread, target_thread, False)
-            except Exception as e:
-                print(f"Error refocusing target window: {e}")
 
-    def inject_text(self, text: str):
-        """
-        Injects text into active search box or document with clipboard lock recovery.
-        """
-        if not text:
-            return
+            return True
+        except Exception as e:
+            print(f"Error refocusing target window: {e}")
+            return False
 
-        # 1. Re-focus the target window / search box
-        self.refocus_target()
-        time.sleep(0.06)
+    def get_clipboard_text(self) -> str:
+        text = ""
+        for attempt in range(5):
+            if user32.OpenClipboard(self.overlay_hwnd):
+                try:
+                    if user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+                        h_data = user32.GetClipboardData(CF_UNICODETEXT)
+                        if h_data:
+                            ptr = kernel32.GlobalLock(h_data)
+                            if ptr:
+                                try:
+                                    text = ctypes.wstring_at(ptr)
+                                finally:
+                                    kernel32.GlobalUnlock(h_data)
+                    return text
+                finally:
+                    user32.CloseClipboard()
+            time.sleep(0.01 * (attempt + 1))
+        return text or self._clip_fallback_text
 
-        # 2. Put text on clipboard with retry backoff
-        copied = False
-        for attempt in range(3):
+    def set_clipboard_text(self, text: str) -> bool:
+        if text is None:
+            text = ""
+        self._clip_fallback_text = text
+        self._last_clip_op_real_win32 = False
+        text_bytes = (text + "\0").encode("utf-16le")
+        nbytes = len(text_bytes)
+
+        hwnds_to_try = [self.overlay_hwnd, None] if self.overlay_hwnd else [None]
+        for attempt in range(5):
+            for h in hwnds_to_try:
+                if user32.OpenClipboard(h):
+                    try:
+                        user32.EmptyClipboard()
+                        h_glob = kernel32.GlobalAlloc(GMEM_MOVEABLE, nbytes)
+                        if not h_glob:
+                            continue
+                        ptr = kernel32.GlobalLock(h_glob)
+                        if not ptr:
+                            kernel32.GlobalFree(h_glob)
+                            continue
+                        try:
+                            ctypes.memmove(ptr, text_bytes, nbytes)
+                        finally:
+                            kernel32.GlobalUnlock(h_glob)
+                        res = user32.SetClipboardData(CF_UNICODETEXT, h_glob)
+                        if res:
+                            self._last_clip_op_real_win32 = True
+                            return True
+                        else:
+                            kernel32.GlobalFree(h_glob)
+                    finally:
+                        user32.CloseClipboard()
+            time.sleep(0.01 * (attempt + 1))
+        return True
+
+    def _send_ctrl_v(self) -> bool:
+        inputs = (INPUT * 4)()
+        inputs[0].type = INPUT_KEYBOARD
+        inputs[0].ki = KEYBDINPUT(wVk=VK_CONTROL, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
+        inputs[1].type = INPUT_KEYBOARD
+        inputs[1].ki = KEYBDINPUT(wVk=VK_V, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
+        inputs[2].type = INPUT_KEYBOARD
+        inputs[2].ki = KEYBDINPUT(wVk=VK_V, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+        inputs[3].type = INPUT_KEYBOARD
+        inputs[3].ki = KEYBDINPUT(wVk=VK_CONTROL, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+
+        sent = user32.SendInput(4, inputs, ctypes.sizeof(INPUT))
+        if sent < 4:
+            # Fallback if SendInput is blocked by UIPI elevation
             try:
-                pyperclip.copy(text)
-                copied = True
-                break
+                user32.keybd_event(VK_CONTROL, 0, 0, 0)
+                user32.keybd_event(VK_V, 0, 0, 0)
+                time.sleep(0.02)
+                user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
+                user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+                return True
             except Exception:
-                time.sleep(0.03)
+                return False
+        return True
 
-        if not copied:
-            # Fallback: Type directly with keyboard controller if clipboard is locked
+    def _send_unicode_string(self, text: str) -> bool:
+        inputs = []
+        for ch in text:
+            code = ord(ch)
+            if code > 0xFFFF:
+                lead = 0xD800 + ((code - 0x10000) >> 10)
+                trail = 0xDC00 + ((code - 0x10000) & 0x3FF)
+                surrogates = [lead, trail]
+            else:
+                surrogates = [code]
+
+            for s in surrogates:
+                inp_down = INPUT()
+                inp_down.type = INPUT_KEYBOARD
+                inp_down.ki = KEYBDINPUT(wVk=0, wScan=s, dwFlags=KEYEVENTF_UNICODE, time=0, dwExtraInfo=0)
+                inputs.append(inp_down)
+
+                inp_up = INPUT()
+                inp_up.type = INPUT_KEYBOARD
+                inp_up.ki = KEYBDINPUT(wVk=0, wScan=s, dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+                inputs.append(inp_up)
+
+        if not inputs:
+            return True
+
+        total_sent = 0
+        batch_size = 128
+        for i in range(0, len(inputs), batch_size):
+            chunk = inputs[i : i + batch_size]
+            arr = (INPUT * len(chunk))(*chunk)
+            sent = user32.SendInput(len(chunk), arr, ctypes.sizeof(INPUT))
+            total_sent += sent
+
+        if total_sent == 0:
             try:
                 kb.type(text)
-                return
+                return True
             except Exception:
-                pass
+                return False
+        return True
 
-        time.sleep(0.04)
+    def inject_text(self, text: str) -> bool:
+        if not text:
+            return False
 
-        # 3. Simulate Ctrl + V using Win32 keybd_event & pynput
-        try:
-            user32.keybd_event(VK_CONTROL, 0, 0, 0)
-            user32.keybd_event(VK_V, 0, 0, 0)
-            time.sleep(0.03)
-            user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
-            user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
-        except Exception as e:
-            print(f"Win32 keybd_event paste error: {e}")
+        self.refocus_target()
+        time.sleep(0.05)
 
-        # Secondary fallback with pynput controller
-        try:
-            with kb.pressed(Key.ctrl):
-                kb.press('v')
-                kb.release('v')
-        except Exception as e:
-            print(f"pynput paste error: {e}")
+        orig_clip = self.get_clipboard_text()
+        self.set_clipboard_text(text)
+
+        if not getattr(self, "_last_clip_op_real_win32", False):
+            # Real OS clipboard was inaccessible (e.g. access denied / locked).
+            # Direct Unicode typing fallback via SendInput KEYEVENTF_UNICODE!
+            return self._send_unicode_string(text)
+
+        time.sleep(0.03)
+        self._send_ctrl_v()
+
+        time.sleep(0.075)
+        if orig_clip:
+            self.set_clipboard_text(orig_clip)
+
+        return True

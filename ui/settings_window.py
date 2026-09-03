@@ -1,7 +1,7 @@
 import threading
 import webbrowser
 import customtkinter as ctk
-import sounddevice as sd
+
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -17,6 +17,7 @@ class SettingsWindow:
         self.is_open = False
         self.test_stream = None
         self.test_running = False
+        self.dev_map = {}
 
     def show(self):
         if self.is_open and self.window:
@@ -52,12 +53,16 @@ class SettingsWindow:
                 dev_list.append(name)
                 self.dev_map[name] = idx
 
-        current_dev_idx = self.config.get("input_device_index", 9)
+        saved_name = self.config.get("input_device_name", None)
+        current_dev_idx = self.config.get("input_device_index", None)
         current_dev_name = dev_list[0] if dev_list else "Default Microphone"
-        for name, idx in self.dev_map.items():
-            if idx == current_dev_idx:
-                current_dev_name = name
-                break
+        if saved_name and saved_name in self.dev_map:
+            current_dev_name = saved_name
+        elif current_dev_idx is not None:
+            for name, idx in self.dev_map.items():
+                if idx == current_dev_idx:
+                    current_dev_name = name
+                    break
 
         self.dev_var = ctk.StringVar(value=current_dev_name)
         dev_menu = ctk.CTkOptionMenu(
@@ -150,6 +155,9 @@ class SettingsWindow:
                 ctk.CTkLabel(card, text=f"🕒 {item.get('timestamp')} • {item.get('mode', 'smart_flow')}", font=ctk.CTkFont(size=11), text_color="gray").pack(anchor="w", padx=10, pady=(6, 2))
                 ctk.CTkLabel(card, text=item.get("text", ""), wraplength=550, justify="left").pack(anchor="w", padx=10, pady=(0, 8))
 
+        if self.audio_recorder:
+            dev_idx = self.config.get("input_device_index", None)
+            self.audio_recorder.start_monitoring(device_index=dev_idx)
         self._start_vu_monitor()
 
     def _refresh_snippets_list(self):
@@ -194,72 +202,40 @@ class SettingsWindow:
         self.config.set("auto_context", self.auto_ctx_var.get())
 
     def stop_vu_monitor(self):
-        """Allows app.py to yield exclusive mic access when recording starts."""
-        self.test_running = False
-        if self.test_stream:
-            try:
-                self.test_stream.stop()
-                self.test_stream.close()
-            except Exception:
-                pass
-            self.test_stream = None
+        """No-op in unified stream architecture to prevent VU meter thread death."""
+        pass
 
     def _start_vu_monitor(self):
-        self.stop_vu_monitor()
         self.test_running = True
         
         def monitor():
-            import time, math, struct
-            # If recorder is currently capturing, just read its volume
+            import time
             while self.test_running and self.is_open:
-                if self.audio_recorder and self.audio_recorder.is_recording:
+                if self.audio_recorder:
                     vol = self.audio_recorder.get_current_volume()
                     if self.window and self.vu_progress:
-                        try:
-                            self.window.after(0, lambda v=vol: self.vu_progress.set(v))
-                        except Exception:
-                            pass
-                    time.sleep(0.05)
-                    continue
-
-                # When idle, listen with gentle non-exclusive stream
-                if not self.test_stream and self.test_running and self.is_open:
-                    dev_idx = self.config.get("input_device_index", 9)
-                    def callback(indata, frames, time_info, status):
-                        raw = bytes(indata)
-                        count = len(raw) // 2
-                        if count > 0 and self.is_open:
-                            shorts = struct.unpack(f"<{count}h", raw[:count*2])
-                            rms = math.sqrt(sum(s*s for s in shorts) / count)
-                            level = min(1.0, float(rms * 0.015))
-                            if self.window and self.vu_progress:
+                        def safe_set(v=vol):
+                            if self.is_open and self.window and self.vu_progress:
                                 try:
-                                    self.window.after(0, lambda: self.vu_progress.set(level))
+                                    self.vu_progress.set(v)
                                 except Exception:
                                     pass
-                    try:
-                        self.test_stream = sd.RawInputStream(
-                            samplerate=48000,
-                            channels=2,
-                            dtype="int16",
-                            device=dev_idx,
-                            callback=callback,
-                            blocksize=2048
-                        )
-                        self.test_stream.start()
-                    except Exception:
-                        pass
-                time.sleep(0.1)
-
-            self.stop_vu_monitor()
+                        try:
+                            self.window.after(0, safe_set)
+                        except Exception:
+                            pass
+                time.sleep(0.04)
 
         threading.Thread(target=monitor, daemon=True).start()
 
     def _on_device_changed(self, choice):
-        idx = self.dev_map.get(choice, 9)
-        self.config.set("input_device_index", idx)
-        self.stop_vu_monitor()
-        self._start_vu_monitor()
+        idx = self.dev_map.get(choice, None)
+        if idx is not None:
+            self.config.set("input_device_index", idx)
+            self.config.set("input_device_name", choice)
+            if self.audio_recorder and not self.audio_recorder.is_recording:
+                self.audio_recorder.stop_monitoring()
+                self.audio_recorder.start_monitoring(device_index=idx)
 
     def _on_hotkey_changed(self, choice):
         self.config.set("hotkey", choice)
@@ -281,8 +257,13 @@ class SettingsWindow:
         threading.Thread(target=run, daemon=True).start()
 
     def _on_close(self):
-        self.stop_vu_monitor()
+        self.test_running = False
         self.is_open = False
+        if self.audio_recorder:
+            self.audio_recorder.stop_monitoring()
         if self.window:
-            self.window.destroy()
+            try:
+                self.window.destroy()
+            except Exception:
+                pass
             self.window = None

@@ -3,11 +3,12 @@ import pystray
 from PIL import Image, ImageDraw
 
 class TrayIcon:
-    def __init__(self, on_open_settings, on_toggle_dictation, on_toggle_overlay, on_exit):
+    def __init__(self, on_open_settings, on_toggle_dictation, on_toggle_overlay, on_exit, config_manager=None):
         self.on_open_settings = on_open_settings
         self.on_toggle_dictation = on_toggle_dictation
         self.on_toggle_overlay = on_toggle_overlay
         self.on_exit = on_exit
+        self.config = config_manager
         self.icon = None
 
     def _create_image(self):
@@ -22,12 +23,16 @@ class TrayIcon:
         draw.ellipse([44, 10, 56, 22], fill=(16, 185, 129, 255))
         return img
 
+    def get_hotkey_label(self):
+        hk = self.config.get("hotkey", "f8") if self.config else "f8"
+        return hk.upper()
+
     def start(self):
         menu = pystray.Menu(
-            pystray.MenuItem("🎙️ OwnVoice (F8)", None, enabled=False),
+            pystray.MenuItem("🎙️ OwnVoice", None, enabled=False),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("⚡ Toggle Dictation (F8)", lambda: self.on_toggle_dictation()),
-            pystray.MenuItem("👁️ Show/Hide Pill", lambda: self.on_toggle_overlay()),
+            pystray.MenuItem(lambda item: f"⚡ Toggle Dictation ({self.get_hotkey_label()})", lambda: self.on_toggle_dictation()),
+            pystray.MenuItem("👁️ Show/Hide Pill", lambda: self.on_toggle_overlay(), default=True),
             pystray.MenuItem("⚙️ Settings", lambda: self.on_open_settings()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("❌ Exit", lambda: self.on_exit())
@@ -37,4 +42,8 @@ class TrayIcon:
 
     def stop(self):
         if self.icon:
-            self.icon.stop()
+            try:
+                self.icon.stop()
+            except Exception:
+                pass
+            self.icon = None

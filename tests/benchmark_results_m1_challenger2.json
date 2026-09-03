@@ -1,0 +1,379 @@
+{
+  "summary": {
+    "benchmark_1_leak_test": {
+      "status": "CONFIRMED",
+      "cycles": 50,
+      "rss_delta_mb": 0.96484375,
+      "thread_delta": 0
+    },
+    "benchmark_2_vu_meter_lifecycle": {
+      "status": "CONFIRMED",
+      "cycles": 20,
+      "total_polls": 50,
+      "avg_volume": 0.0
+    },
+    "benchmark_3_wdmks_infiltration": {
+      "status": "CONFIRMED",
+      "tested_devices": 12
+    },
+    "total_elapsed_seconds": 24.788531400001375,
+    "overall_verdict": "CONFIRM"
+  },
+  "b1": {
+    "passed": true,
+    "cycles": 50,
+    "baseline_rss_mb": 50.90234375,
+    "warm_baseline_rss_mb": 52.82421875,
+    "final_rss_mb": 53.7890625,
+    "rss_delta_mb": 0.96484375,
+    "baseline_threads": 13,
+    "warm_baseline_threads": 16,
+    "final_threads": 16,
+    "thread_delta": 0,
+    "cycle1_to_cycle50_threads": 0,
+    "samples": [
+      {
+        "cycle": 1,
+        "rss_mb": 53.7578125,
+        "os_threads": 16,
+        "py_threads": 1,
+        "audio_bytes": 8236
+      },
+      {
+        "cycle": 10,
+        "rss_mb": 53.11328125,
+        "os_threads": 16,
+        "py_threads": 1,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 20,
+        "rss_mb": 53.13671875,
+        "os_threads": 16,
+        "py_threads": 1,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 30,
+        "rss_mb": 53.1171875,
+        "os_threads": 16,
+        "py_threads": 1,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 40,
+        "rss_mb": 53.1171875,
+        "os_threads": 16,
+        "py_threads": 1,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 50,
+        "rss_mb": 53.1484375,
+        "os_threads": 16,
+        "py_threads": 1,
+        "audio_bytes": 4140
+      }
+    ]
+  },
+  "b2": {
+    "passed": true,
+    "cycles": 20,
+    "total_polls": 50,
+    "min_volume": 0.0,
+    "max_volume": 0.0,
+    "avg_volume": 0.0,
+    "readings": [
+      {
+        "cycle": 1,
+        "transition_ms": 0.021099986042827368,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 2,
+        "transition_ms": 0.008799994247965515,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 8236
+      },
+      {
+        "cycle": 3,
+        "transition_ms": 0.025899993488565087,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 4,
+        "transition_ms": 0.028000009479001164,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 8236
+      },
+      {
+        "cycle": 5,
+        "transition_ms": 0.0278999941656366,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 6,
+        "transition_ms": 0.007700000423938036,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 8236
+      },
+      {
+        "cycle": 7,
+        "transition_ms": 0.028300011763349175,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 8,
+        "transition_ms": 0.020799998310394585,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 9,
+        "transition_ms": 0.02580000727903098,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 10,
+        "transition_ms": 0.029700007871724665,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 11,
+        "transition_ms": 0.006799993570894003,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 8236
+      },
+      {
+        "cycle": 12,
+        "transition_ms": 0.029999995604157448,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 13,
+        "transition_ms": 0.03169999399688095,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 14,
+        "transition_ms": 0.017999991541728377,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 15,
+        "transition_ms": 0.030099996365606785,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 16,
+        "transition_ms": 0.007000009645707905,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 8236
+      },
+      {
+        "cycle": 17,
+        "transition_ms": 0.02719998883549124,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 18,
+        "transition_ms": 0.02849999873433262,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 8236
+      },
+      {
+        "cycle": 19,
+        "transition_ms": 0.028700000257231295,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      },
+      {
+        "cycle": 20,
+        "transition_ms": 0.02950000634882599,
+        "vol_during": 0.0,
+        "vol_after": 0.0,
+        "audio_bytes": 4140
+      }
+    ]
+  },
+  "b3": {
+    "passed": true,
+    "tested_count": 12,
+    "results": [
+      {
+        "infiltrated_device_index": 10,
+        "device_name": "Output 1 (QCAUD Wave Speaker)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "OUTPUT_ONLY (max_in=0)",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 18.571499997051433,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 11,
+        "device_name": "Output 2 (QCAUD Wave Speaker)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "OUTPUT_ONLY (max_in=0)",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 11.859999998705462,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 12,
+        "device_name": "Input (QCAUD Wave Speaker)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "RAW_REJECTED (PortAudioError: Error opening RawInputStream: Unanticipated host error [PaErrorCode -9999]: 'Blocking API not supported yet' [Windows WDM-KS error -9999])",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 11.244699999224395,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 13,
+        "device_name": "Output 1 (QCAUD Wave Speaker Headset)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "OUTPUT_ONLY (max_in=0)",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 13.318600002094172,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 14,
+        "device_name": "Output 2 (QCAUD Wave Speaker Headset)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "OUTPUT_ONLY (max_in=0)",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 12.470400004531257,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 15,
+        "device_name": "Input (QCAUD Wave Speaker Headset)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "RAW_REJECTED (PortAudioError: Error opening RawInputStream: Unanticipated host error [PaErrorCode -9999]: 'Blocking API not supported yet' [Windows WDM-KS error -9999])",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 10.356800004956312,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 16,
+        "device_name": "Headset Microphone (QCAUD Wave Microphone Headset)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "RAW_REJECTED (PortAudioError: Error opening RawInputStream: Unanticipated host error [PaErrorCode -9999]: 'Blocking API not supported yet' [Windows WDM-KS error -9999])",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 15.340400001150556,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 17,
+        "device_name": "Input ()",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "RAW_REJECTED (PortAudioError: Error opening RawInputStream: Unanticipated host error [PaErrorCode -9999]: 'Blocking API not supported yet' [Windows WDM-KS error -9999])",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 9.085400000913069,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 18,
+        "device_name": "Output ()",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "OUTPUT_ONLY (max_in=0)",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 14.426599998841994,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 19,
+        "device_name": "Input ()",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "RAW_REJECTED (PortAudioError: Error opening RawInputStream: Unanticipated host error [PaErrorCode -9999]: 'Blocking API not supported yet' [Windows WDM-KS error -9999])",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 12.95600000594277,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 20,
+        "device_name": "Input ()",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "RAW_REJECTED (PortAudioError: Error opening RawInputStream: Unanticipated host error [PaErrorCode -9999]: 'Blocking API not supported yet' [Windows WDM-KS error -9999])",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 12.422800005879253,
+        "captured_bytes": 4140
+      },
+      {
+        "infiltrated_device_index": 21,
+        "device_name": "Microphone Array (ACX Microphone Array - Front)",
+        "host_api": "Windows WDM-KS",
+        "raw_status": "RAW_REJECTED (PortAudioError: Error opening RawInputStream: Unanticipated host error [PaErrorCode -9999]: 'Blocking API not supported yet' [Windows WDM-KS error -9999])",
+        "fallback_success": true,
+        "fallback_device_index": 9,
+        "fallback_device_name": "Microphone Array (Qualcomm(R) Aqstic(TM) ACX Static Endpoints Audio Device)",
+        "fallback_api": "Windows WASAPI",
+        "fallback_latency_ms": 32.2854000114603,
+        "captured_bytes": 4140
+      }
+    ]
+  }
+}

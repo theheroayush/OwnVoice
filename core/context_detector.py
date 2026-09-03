@@ -2,10 +2,27 @@ import ctypes
 from ctypes import wintypes
 from typing import Tuple
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
+user32 = ctypes.WinDLL("user32")
+kernel32 = ctypes.WinDLL("kernel32")
 
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+# Explicit Win32 signatures for 64-bit safety
+user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+user32.GetWindowTextW.restype = ctypes.c_int
+user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+user32.GetWindowTextLengthW.restype = ctypes.c_int
+user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+user32.IsWindow.argtypes = [wintypes.HWND]
+user32.IsWindow.restype = wintypes.BOOL
+
+kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.OpenProcess.restype = wintypes.HANDLE
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
+kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
 
 class ContextDetector:
     """
@@ -15,21 +32,31 @@ class ContextDetector:
     """
 
     CODING_PROCESSES = {
-        "code.exe", "cursor.exe", "devenv.exe", "windowsterminal.exe",
-        "powershell.exe", "cmd.exe", "pycharm64.exe", "idea64.exe",
-        "sublime_text.exe", "alacritty.exe", "wezterm-gui.exe", "git-bash.exe"
+        "code.exe", "code - insiders.exe", "cursor.exe", "devenv.exe",
+        "windowsterminal.exe", "wt.exe", "warp.exe", "powershell.exe",
+        "pwsh.exe", "cmd.exe", "pycharm64.exe", "pycharm.exe",
+        "idea64.exe", "idea.exe", "clion64.exe", "clion.exe",
+        "webstorm64.exe", "webstorm.exe", "rider64.exe", "rider.exe",
+        "goland64.exe", "goland.exe", "datagrip64.exe", "datagrip.exe",
+        "rubymine64.exe", "sublime_text.exe", "alacritty.exe",
+        "wezterm-gui.exe", "git-bash.exe", "mintty.exe", "zed.exe",
+        "nvim-qt.exe", "gvim.exe", "terminal.exe"
     }
 
     DOCUMENT_PROCESSES = {
-        "winword.exe", "wordpad.exe", "notepad.exe", "obsidian.exe", "notion.exe"
+        "winword.exe", "wordpad.exe", "notepad.exe", "notepad++.exe",
+        "obsidian.exe", "notion.exe", "excel.exe", "powerpnt.exe",
+        "acrobat.exe", "foxitreader.exe", "typora.exe"
     }
 
     EMAIL_PROCESSES = {
-        "outlook.exe", "thunderbird.exe", "mail.exe"
+        "outlook.exe", "olk.exe", "thunderbird.exe", "mail.exe"
     }
 
     CHAT_PROCESSES = {
-        "slack.exe", "teams.exe", "whatsapp.exe", "discord.exe", "telegram.exe"
+        "slack.exe", "teams.exe", "ms-teams.exe", "msteams.exe",
+        "whatsapp.exe", "discord.exe", "telegram.exe", "signal.exe",
+        "skype.exe", "element.exe"
     }
 
     @staticmethod
@@ -72,16 +99,45 @@ class ContextDetector:
         exe, title = cls.get_window_info(hwnd)
         title_lower = title.lower()
 
-        if exe in cls.CODING_PROCESSES:
+        # 1. Coding environment detection
+        if (exe in cls.CODING_PROCESSES or
+            "visual studio" in title_lower or
+            "vscode" in title_lower or
+            "sublime text" in title_lower or
+            "windows terminal" in title_lower or
+            title_lower.endswith("powershell") or
+            title_lower.endswith("cmd.exe")):
             return "code", "Code"
 
-        if exe in cls.EMAIL_PROCESSES or "gmail" in title_lower or "outlook" in title_lower:
+        # 2. Email client detection
+        if (exe in cls.EMAIL_PROCESSES or
+            "gmail" in title_lower or
+            "outlook" in title_lower or
+            "thunderbird" in title_lower or
+            title_lower.endswith(" - mail")):
             return "formal_email", "Email"
 
-        if exe in cls.CHAT_PROCESSES or "slack" in title_lower or "discord" in title_lower or "whatsapp" in title_lower:
+        # 3. Chat / Messaging detection
+        if (exe in cls.CHAT_PROCESSES or
+            "slack" in title_lower or
+            "discord" in title_lower or
+            "whatsapp" in title_lower or
+            "telegram" in title_lower or
+            "teams" in title_lower or
+            "messenger" in title_lower):
             return "chat", "Chat"
 
-        if exe in cls.DOCUMENT_PROCESSES or "google docs" in title_lower or "word" in title_lower:
+        # 4. Document / Editing tools (including UWP Notepad & Word)
+        if (exe in cls.DOCUMENT_PROCESSES or
+            "google docs" in title_lower or
+            " - word" in title_lower or
+            title_lower.endswith("word") or
+            " - notepad" in title_lower or
+            title_lower == "notepad" or
+            "excel" in title_lower or
+            "powerpoint" in title_lower or
+            "obsidian" in title_lower or
+            "notion" in title_lower):
             return "formal_document", "Doc"
 
         return "smart_flow", "Flow"

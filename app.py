@@ -4,6 +4,15 @@ import time
 import datetime
 import threading
 from pathlib import Path
+
+if getattr(sys, "frozen", False):
+    APP_BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    APP_BASE_DIR = Path(__file__).resolve().parent
+
+os.chdir(APP_BASE_DIR)
+sys.path.insert(0, str(APP_BASE_DIR))
+
 from config import config_manager
 from core.audio_recorder import AudioRecorder
 from core.ai_engine import AIEngine
@@ -16,7 +25,8 @@ from ui.floating_widget import FloatingWidget
 from ui.settings_window import SettingsWindow
 from ui.tray_icon import TrayIcon
 
-LOG_FILE = Path(__file__).resolve().parent / "app.log"
+LOG_FILE = APP_BASE_DIR / "app.log"
+
 
 def log_event(msg: str):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -46,6 +56,7 @@ class OwnVoiceApp:
             on_open_settings=self.open_settings,
             on_cancel=self.cancel_dictation,
             on_hide=self.hide_overlay,
+            on_exit=self.exit_app,
             injector=self.injector,
             config_manager=self.config
         )
@@ -68,7 +79,8 @@ class OwnVoiceApp:
             on_open_settings=self.open_settings,
             on_toggle_dictation=self.toggle_dictation,
             on_toggle_overlay=self.toggle_overlay,
-            on_exit=self.exit_app
+            on_exit=self.exit_app,
+            config_manager=self.config
         )
 
     def reload_settings(self):
@@ -100,7 +112,7 @@ class OwnVoiceApp:
             self.overlay.root.after(0, lambda: self.overlay.show_recording(self.active_context_label))
             
         try:
-            dev_idx = self.config.get("input_device_index", 9)
+            dev_idx = self.config.get("input_device_index", None)
             self.audio_recorder.start_recording(device_index=dev_idx)
             log_event(f"Audio stream started on Device {self.audio_recorder.active_device_index} ({self.audio_recorder.sample_rate}Hz)")
         except Exception as e:
@@ -199,18 +211,59 @@ class OwnVoiceApp:
 
     def exit_app(self):
         log_event("Exiting OwnVoice...")
-        self.hotkey_manager.stop()
-        self.tray.stop()
-        if self.overlay.root:
-            self.overlay.root.after(0, self.overlay.root.destroy)
-        sys.exit(0)
+        try:
+            self.hotkey_manager.stop()
+        except Exception:
+            pass
+        try:
+            self.tray.stop()
+        except Exception:
+            pass
+        try:
+            if self.settings_ui:
+                self.settings_ui._on_close()
+        except Exception:
+            pass
+        try:
+            if self.audio_recorder:
+                self.audio_recorder.stop_monitoring()
+        except Exception:
+            pass
+        try:
+            if self.overlay:
+                self.overlay.destroy()
+        except Exception:
+            pass
+        os._exit(0)
 
     def run(self):
-        self.hotkey_manager.start()
-        self.tray.start()
-        self.overlay.start_overlay()
-        self.overlay.root.mainloop()
+        try:
+            log_event("Starting HotkeyManager...")
+            self.hotkey_manager.start()
+            log_event("Starting Tray Icon...")
+            self.tray.start()
+            log_event("Starting Overlay...")
+            self.overlay.start_overlay()
+            log_event("Entering mainloop...")
+            self.overlay.root.mainloop()
+        except Exception as e:
+            import traceback
+            err = traceback.format_exc()
+            log_event(f"FATAL ERROR: {err}")
+            try:
+                (APP_BASE_DIR / "crash.log").write_text(err, encoding="utf-8")
+            except Exception:
+                pass
+            raise
 
 if __name__ == "__main__":
-    app = OwnVoiceApp()
-    app.run()
+    try:
+        app = OwnVoiceApp()
+        app.run()
+    except Exception as e:
+        import traceback
+        err = traceback.format_exc()
+        try:
+            (APP_BASE_DIR / "crash.log").write_text(err, encoding="utf-8")
+        except Exception:
+            pass
