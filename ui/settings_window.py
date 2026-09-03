@@ -43,7 +43,7 @@ class SettingsWindow:
         tab_history = tabview.add("📜 History")
 
         # ----------------- Tab 1: General -----------------
-        ctk.CTkLabel(tab_general, text="Microphone (Configured for Qualcomm WASAPI 48kHz):", font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w", padx=15, pady=(10, 4))
+        ctk.CTkLabel(tab_general, text="Microphone Input Device (Safe Verified Devices):", font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w", padx=15, pady=(10, 4))
         
         dev_list = []
         self.dev_map = {}
@@ -65,7 +65,7 @@ class SettingsWindow:
             values=dev_list or ["Default Microphone"],
             variable=self.dev_var,
             command=self._on_device_changed,
-            width=450
+            width=460
         )
         dev_menu.pack(anchor="w", padx=15, pady=(0, 10))
 
@@ -105,7 +105,6 @@ class SettingsWindow:
         ctk.CTkLabel(tab_snippets, text="Voice Snippets & Text Expander", font=ctk.CTkFont(weight="bold", size=14)).pack(anchor="w", padx=15, pady=(10, 2))
         ctk.CTkLabel(tab_snippets, text="Say the trigger phrase while dictating, and OwnVoice will expand it instantly.", text_color="gray", font=ctk.CTkFont(size=11)).pack(anchor="w", padx=15, pady=(0, 10))
 
-        # Input row to add new snippet
         add_frame = ctk.CTkFrame(tab_snippets, fg_color="#1E293B", corner_radius=8)
         add_frame.pack(fill="x", padx=15, pady=(0, 10))
         
@@ -117,7 +116,6 @@ class SettingsWindow:
 
         ctk.CTkButton(add_frame, text="➕ Add", width=80, command=self._add_snippet).pack(side="left", padx=10, pady=8)
 
-        # Snippet List View
         self.snippet_scroll = ctk.CTkScrollableFrame(tab_snippets, height=260)
         self.snippet_scroll.pack(fill="both", expand=True, padx=15, pady=5)
         self._refresh_snippets_list()
@@ -167,7 +165,7 @@ class SettingsWindow:
             card = ctk.CTkFrame(self.snippet_scroll, fg_color="#0F172A", corner_radius=6)
             card.pack(fill="x", pady=3, padx=5)
             
-            ctk.CTkLabel(card, text=f"🗣️ \"{trig}\"", font=ctk.CTkFont(weight="bold", size=12), text_color="#38BDF8").pack(side="left", padx=10, pady=6)
+            ctk.CTkLabel(card, text=f'🗣️ "{trig}"', font=ctk.CTkFont(weight="bold", size=12), text_color="#38BDF8").pack(side="left", padx=10, pady=6)
             ctk.CTkLabel(card, text=f"➔  {exp}", font=ctk.CTkFont(size=11), text_color="#E2E8F0").pack(side="left", padx=5, pady=6)
             
             del_btn = ctk.CTkButton(card, text="✕", width=28, height=24, fg_color="#7F1D1D", hover_color="#EF4444", command=lambda t=trig: self._delete_snippet(t))
@@ -195,46 +193,73 @@ class SettingsWindow:
     def _on_auto_ctx_changed(self):
         self.config.set("auto_context", self.auto_ctx_var.get())
 
-    def _start_vu_monitor(self):
-        self.test_running = True
-        def monitor():
-            import math, struct
-            dev_idx = self.config.get("input_device_index", 9)
-            def callback(indata, frames, time_info, status):
-                raw = bytes(indata)
-                count = len(raw) // 2
-                if count > 0 and self.is_open:
-                    shorts = struct.unpack(f"<{count}h", raw[:count*2])
-                    rms = math.sqrt(sum(s*s for s in shorts) / count)
-                    level = min(1.0, float(rms * 0.015))
-                    if self.window and self.vu_progress:
-                        try:
-                            self.window.after(0, lambda: self.vu_progress.set(level))
-                        except Exception:
-                            pass
-            try:
-                self.test_stream = sd.RawInputStream(samplerate=48000, channels=2, dtype="int16", device=dev_idx, callback=callback, blocksize=2048)
-                self.test_stream.start()
-                while self.test_running and self.is_open:
-                    import time
-                    time.sleep(0.1)
-                if self.test_stream:
-                    self.test_stream.stop()
-                    self.test_stream.close()
-            except Exception:
-                pass
-        threading.Thread(target=monitor, daemon=True).start()
-
-    def _on_device_changed(self, choice):
-        idx = self.dev_map.get(choice, 9)
-        self.config.set("input_device_index", idx)
+    def stop_vu_monitor(self):
+        """Allows app.py to yield exclusive mic access when recording starts."""
+        self.test_running = False
         if self.test_stream:
             try:
                 self.test_stream.stop()
                 self.test_stream.close()
             except Exception:
                 pass
-            self._start_vu_monitor()
+            self.test_stream = None
+
+    def _start_vu_monitor(self):
+        self.stop_vu_monitor()
+        self.test_running = True
+        
+        def monitor():
+            import time, math, struct
+            # If recorder is currently capturing, just read its volume
+            while self.test_running and self.is_open:
+                if self.audio_recorder and self.audio_recorder.is_recording:
+                    vol = self.audio_recorder.get_current_volume()
+                    if self.window and self.vu_progress:
+                        try:
+                            self.window.after(0, lambda v=vol: self.vu_progress.set(v))
+                        except Exception:
+                            pass
+                    time.sleep(0.05)
+                    continue
+
+                # When idle, listen with gentle non-exclusive stream
+                if not self.test_stream and self.test_running and self.is_open:
+                    dev_idx = self.config.get("input_device_index", 9)
+                    def callback(indata, frames, time_info, status):
+                        raw = bytes(indata)
+                        count = len(raw) // 2
+                        if count > 0 and self.is_open:
+                            shorts = struct.unpack(f"<{count}h", raw[:count*2])
+                            rms = math.sqrt(sum(s*s for s in shorts) / count)
+                            level = min(1.0, float(rms * 0.015))
+                            if self.window and self.vu_progress:
+                                try:
+                                    self.window.after(0, lambda: self.vu_progress.set(level))
+                                except Exception:
+                                    pass
+                    try:
+                        self.test_stream = sd.RawInputStream(
+                            samplerate=48000,
+                            channels=2,
+                            dtype="int16",
+                            device=dev_idx,
+                            callback=callback,
+                            blocksize=2048
+                        )
+                        self.test_stream.start()
+                    except Exception:
+                        pass
+                time.sleep(0.1)
+
+            self.stop_vu_monitor()
+
+        threading.Thread(target=monitor, daemon=True).start()
+
+    def _on_device_changed(self, choice):
+        idx = self.dev_map.get(choice, 9)
+        self.config.set("input_device_index", idx)
+        self.stop_vu_monitor()
+        self._start_vu_monitor()
 
     def _on_hotkey_changed(self, choice):
         self.config.set("hotkey", choice)
@@ -256,13 +281,7 @@ class SettingsWindow:
         threading.Thread(target=run, daemon=True).start()
 
     def _on_close(self):
-        self.test_running = False
-        if self.test_stream:
-            try:
-                self.test_stream.stop()
-                self.test_stream.close()
-            except Exception:
-                pass
+        self.stop_vu_monitor()
         self.is_open = False
         if self.window:
             self.window.destroy()

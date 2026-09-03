@@ -79,7 +79,11 @@ class OwnVoiceApp:
         # 1. Capture target window
         self.injector.update_target_hwnd()
 
-        # 2. App-Aware Context Detection
+        # 2. Yield Settings VU monitor to prevent hardware contention
+        if self.settings_ui:
+            self.settings_ui.stop_vu_monitor()
+
+        # 3. App-Aware Context Detection
         if self.config.get("auto_context", True):
             self.active_context_mode, self.active_context_label = ContextDetector.detect_tone(self.injector.last_target_hwnd)
         else:
@@ -98,6 +102,7 @@ class OwnVoiceApp:
         try:
             dev_idx = self.config.get("input_device_index", 9)
             self.audio_recorder.start_recording(device_index=dev_idx)
+            log_event(f"Audio stream started on Device {self.audio_recorder.active_device_index} ({self.audio_recorder.sample_rate}Hz)")
         except Exception as e:
             log_event(f"Microphone error: {e}")
             if self.overlay.root:

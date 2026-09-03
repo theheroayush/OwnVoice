@@ -13,17 +13,82 @@ class AudioRecorder:
         self.stream = None
         self.lock = threading.Lock()
         self.current_volume = 0.0
+        self.active_device_index = None
 
-    def _find_wasapi_device(self):
+    @staticmethod
+    def get_input_devices():
+        """Returns safe, validated input devices, strictly excluding broken WDM-KS."""
+        devices = []
         try:
             for idx, dev in enumerate(sd.query_devices()):
                 if dev.get("max_input_channels", 0) > 0:
-                    hostapi = sd.query_hostapis(dev["hostapi"])["name"]
-                    if "WASAPI" in hostapi:
-                        return idx, int(dev.get("default_samplerate", 48000))
+                    api = sd.query_hostapis(dev["hostapi"])["name"]
+                    # Strictly filter out unstable WDM-KS kernel streaming
+                    if "WDM-KS" in api:
+                        continue
+                    devices.append((idx, f"[{api}] {dev['name']}"))
         except Exception:
             pass
-        return 9, 48000
+        return devices
+
+    def _get_fallback_candidates(self, preferred_index=None):
+        """
+        Builds prioritized list of (device_index, channels, samplerate):
+        1. Preferred device (if not WDM-KS)
+        2. WASAPI Microphone Array @ 48kHz
+        3. DirectSound Microphone Array @ 44.1kHz
+        4. MME Microsoft Sound Mapper @ 44.1kHz
+        5. Any working non-WDM-KS input device
+        """
+        candidates = []
+        devices = sd.query_devices()
+
+        def add_cand(idx):
+            if idx is not None and 0 <= idx < len(devices):
+                d = devices[idx]
+                api = sd.query_hostapis(d["hostapi"])["name"]
+                if "WDM-KS" not in api and d.get("max_input_channels", 0) > 0:
+                    sr = int(d.get("default_samplerate", 48000))
+                    ch = min(2, d.get("max_input_channels", 1))
+                    candidates.append((idx, ch, sr))
+                    if ch > 1:
+                        candidates.append((idx, 1, sr))
+
+        # 1. Preferred
+        add_cand(preferred_index)
+
+        # 2. WASAPI Microphone
+        for idx, d in enumerate(devices):
+            api = sd.query_hostapis(d["hostapi"])["name"]
+            if "WASAPI" in api and "Microphone" in d["name"]:
+                add_cand(idx)
+
+        # 3. DirectSound
+        for idx, d in enumerate(devices):
+            api = sd.query_hostapis(d["hostapi"])["name"]
+            if "DirectSound" in api and "Microphone" in d["name"]:
+                add_cand(idx)
+
+        # 4. MME / Mapper
+        for idx, d in enumerate(devices):
+            api = sd.query_hostapis(d["hostapi"])["name"]
+            if "MME" in api and d.get("max_input_channels", 0) > 0:
+                add_cand(idx)
+
+        # 5. Any remaining valid input
+        for idx, d in enumerate(devices):
+            add_cand(idx)
+
+        # Deduplicate while preserving priority order
+        seen = set()
+        unique = []
+        for c in candidates:
+            key = (c[0], c[1], c[2])
+            if key not in seen:
+                seen.add(key)
+                unique.append(c)
+
+        return unique
 
     def _callback(self, indata, frame_count, time_info, status):
         if self.is_recording:
@@ -43,42 +108,41 @@ class AudioRecorder:
             if self.is_recording:
                 return
             self.frames = []
-            self.is_recording = True
             self.current_volume = 0.0
 
-        if device_index is None:
-            dev_idx, sr = self._find_wasapi_device()
-        else:
-            dev_idx = device_index
+        candidates = self._get_fallback_candidates(device_index)
+        last_err = None
+        started = False
+
+        for dev_idx, ch, sr in candidates:
             try:
-                sr = int(sd.query_devices(dev_idx).get("default_samplerate", 48000))
-            except Exception:
-                sr = 48000
+                self.stream = sd.RawInputStream(
+                    samplerate=sr,
+                    channels=ch,
+                    dtype="int16",
+                    device=dev_idx,
+                    callback=self._callback,
+                    blocksize=2048
+                )
+                self.stream.start()
+                self.sample_rate = sr
+                self.active_channels = ch
+                self.active_device_index = dev_idx
+                self.is_recording = True
+                started = True
+                break
+            except Exception as e:
+                last_err = e
+                if self.stream:
+                    try:
+                        self.stream.close()
+                    except Exception:
+                        pass
+                    self.stream = None
 
-        self.sample_rate = sr
-        self.device_index = dev_idx
-
-        # Open stream on WASAPI endpoint (2-channel stereo @ 48kHz)
-        try:
-            self.stream = sd.RawInputStream(
-                samplerate=self.sample_rate,
-                channels=2,
-                dtype="int16",
-                device=self.device_index,
-                callback=self._callback,
-                blocksize=2048
-            )
-            self.stream.start()
-        except Exception:
-            self.stream = sd.RawInputStream(
-                samplerate=self.sample_rate,
-                channels=1,
-                dtype="int16",
-                device=self.device_index,
-                callback=self._callback,
-                blocksize=2048
-            )
-            self.stream.start()
+        if not started:
+            self.is_recording = False
+            raise RuntimeError(f"Unable to access any microphone: {last_err}")
 
     def stop_recording(self) -> bytes:
         with self.lock:
@@ -106,15 +170,17 @@ class AudioRecorder:
 
         shorts = struct.unpack(f"<{total_samples}h", raw_audio)
         
-        # Downmix stereo to mono
-        mono_samples = []
-        for i in range(0, len(shorts) - 1, 2):
-            mono_samples.append((shorts[i] + shorts[i+1]) // 2)
-
-        if not mono_samples:
+        # Downmix if stereo
+        if getattr(self, "active_channels", 2) == 2:
+            mono_samples = []
+            for i in range(0, len(shorts) - 1, 2):
+                mono_samples.append((shorts[i] + shorts[i+1]) // 2)
+            if not mono_samples:
+                mono_samples = list(shorts)
+        else:
             mono_samples = list(shorts)
 
-        peak_orig = max(abs(s) for s in mono_samples)
+        peak_orig = max(abs(s) for s in mono_samples) if mono_samples else 0
         
         # 50x Dynamic Auto-Gain Normalization
         if peak_orig > 2:
@@ -135,15 +201,3 @@ class AudioRecorder:
 
     def get_current_volume(self) -> float:
         return self.current_volume
-
-    @staticmethod
-    def get_input_devices():
-        devices = []
-        try:
-            for idx, dev in enumerate(sd.query_devices()):
-                if dev.get("max_input_channels", 0) > 0:
-                    hostapi = sd.query_hostapis(dev["hostapi"])["name"]
-                    devices.append((idx, f"[{hostapi}] {dev['name']}"))
-        except Exception:
-            pass
-        return devices
