@@ -441,6 +441,7 @@ class AudioRecorder:
             self._is_recording = False
             raw_audio = b"".join(self.frames)
             self.frames = []
+            self._last_chunk_frame_idx = 0
             is_mon = self._is_monitoring
 
         if not is_mon:
@@ -455,11 +456,76 @@ class AudioRecorder:
         if not boosted_pcm:
             return b""
 
+        # Resample to 16,000 Hz mono for 91.66% payload reduction
+        target_sr = 16000
+        output_sr = self.sample_rate
+        if self.sample_rate == 48000 and len(boosted_pcm) > 0:
+            try:
+                samples = np.frombuffer(boosted_pcm, dtype=np.int16).astype(np.float32)
+                n = (len(samples) // 3) * 3
+                if n >= 3:
+                    decimated = samples[:n].reshape(-1, 3).mean(axis=1)
+                    boosted_pcm = np.clip(np.round(decimated), -32768, 32767).astype(np.int16).tobytes()
+                    output_sr = target_sr
+            except Exception:
+                output_sr = self.sample_rate
+
         wav_buf = io.BytesIO()
         with wave.open(wav_buf, "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
-            wf.setframerate(self.sample_rate)
+            wf.setframerate(output_sr)
+            wf.writeframes(boosted_pcm)
+
+        return wav_buf.getvalue()
+
+    def get_rolling_chunk(self, chunk_seconds: float = 1.2) -> bytes:
+        """
+        Extracts newly recorded audio frames during active recording,
+        resampled to 16kHz mono with 50x AGC, for real-time live streaming typing.
+        """
+        with self.lock:
+            if not self._is_recording or not self.frames:
+                return b""
+            
+            if not hasattr(self, "_last_chunk_frame_idx"):
+                self._last_chunk_frame_idx = 0
+                
+            current_frame_count = len(self.frames)
+            new_frames = self.frames[self._last_chunk_frame_idx:current_frame_count]
+            
+            # Check minimum audio duration before emitting chunk
+            bytes_per_sec = self.sample_rate * getattr(self, "active_channels", 2) * 2
+            raw_new = b"".join(new_frames)
+            if len(raw_new) < int(bytes_per_sec * chunk_seconds):
+                return b""
+                
+            self._last_chunk_frame_idx = current_frame_count
+
+        boosted_pcm, _ = self._apply_resilient_agc(
+            raw_new, self.sample_rate, getattr(self, "active_channels", 2)
+        )
+        if not boosted_pcm:
+            return b""
+
+        target_sr = 16000
+        output_sr = self.sample_rate
+        if self.sample_rate == 48000 and len(boosted_pcm) > 0:
+            try:
+                samples = np.frombuffer(boosted_pcm, dtype=np.int16).astype(np.float32)
+                n = (len(samples) // 3) * 3
+                if n >= 3:
+                    decimated = samples[:n].reshape(-1, 3).mean(axis=1)
+                    boosted_pcm = np.clip(np.round(decimated), -32768, 32767).astype(np.int16).tobytes()
+                    output_sr = target_sr
+            except Exception:
+                output_sr = self.sample_rate
+
+        wav_buf = io.BytesIO()
+        with wave.open(wav_buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(output_sr)
             wf.writeframes(boosted_pcm)
 
         return wav_buf.getvalue()

@@ -149,17 +149,52 @@ class OwnVoiceApp:
             self.overlay.root.after(0, self.overlay.show)
             self.overlay.root.after(0, lambda: self.overlay.show_recording(self.active_context_label))
             
+        self.streaming_active = False
+        self.streaming_accumulated_text = ""
+        self.injector.reset_streaming()
+
         try:
             dev_idx = self.config.get("input_device_index", None)
             self.audio_recorder.start_recording(device_index=dev_idx)
             log_event(f"Audio stream started on Device {self.audio_recorder.active_device_index} ({self.audio_recorder.sample_rate}Hz)")
+            
+            # Start real-time live streaming worker (types into search bar while speaking)
+            self.streaming_active = True
+            threading.Thread(target=self._streaming_worker, daemon=True).start()
         except Exception as e:
             log_event(f"Microphone error: {e}")
             if self.overlay.root:
                 self.overlay.root.after(0, lambda: self.overlay.show_error("Mic Error"))
 
+    def _streaming_worker(self):
+        """Streams audio chunks and types incrementally into search bar while user speaks."""
+        while getattr(self, "streaming_active", False):
+            time.sleep(1.2)
+            if not getattr(self, "streaming_active", False):
+                break
+            try:
+                chunk = self.audio_recorder.get_rolling_chunk(chunk_seconds=1.2)
+                if chunk and len(chunk) > 3000:
+                    partial_text, _ = self.ai_engine.transcribe_audio(chunk, mode="verbatim")
+                    if partial_text and partial_text.strip():
+                        new_words = partial_text.strip()
+                        if self.streaming_accumulated_text:
+                            self.streaming_accumulated_text += " " + new_words
+                        else:
+                            self.streaming_accumulated_text = new_words
+                        
+                        # Incrementally type words into active search bar / editor
+                        self.injector.inject_streaming_delta(self.streaming_accumulated_text)
+                        
+                        if self.overlay.root:
+                            snippet = self.streaming_accumulated_text[-20:]
+                            self.overlay.root.after(0, lambda s=snippet: self.overlay.show_recording(s))
+            except Exception:
+                pass
+
     def on_recording_stop(self):
         log_event("Recording stopped. Processing audio...")
+        self.streaming_active = False
         if self.settings_ui and hasattr(self.settings_ui, "resume_vu_monitor"):
             self.settings_ui.resume_vu_monitor()
         if self.config.get("sound_effects", False):
@@ -170,16 +205,40 @@ class OwnVoiceApp:
 
         def process():
             try:
+                raw_streamed = self.streaming_accumulated_text.strip()
                 audio_bytes = self.audio_recorder.stop_recording()
-                log_event(f"Captured audio: {len(audio_bytes)} WAV bytes")
-                
+                log_event(f"Captured audio: {len(audio_bytes)} WAV bytes (Resampled 16kHz Mono)")
+
+                # Dual-Engine: If text was already streamed to screen, use ultra-fast text polish
+                if raw_streamed:
+                    log_event(f"Dual-Engine: Polishing raw stream draft: '{raw_streamed}'")
+                    polished_text, latency = self.ai_engine.polish_text(raw_streamed, mode=self.active_context_mode)
+                    expanded_text = self.snippet_engine.expand(polished_text)
+                    
+                    if expanded_text != raw_streamed:
+                        self.injector.replace_streamed_text(raw_streamed, expanded_text)
+                        log_event(f"Dual-Engine: Polished replacement ({int(latency*1000)}ms): '{expanded_text[:40]}'")
+                    
+                    self.config.add_history_entry({
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "text": expanded_text,
+                        "mode": self.active_context_mode,
+                        "latency": latency
+                    })
+                    
+                    if self.config.get("sound_effects", False):
+                        sound_effects.play_success()
+                    if self.overlay.root:
+                        self.overlay.root.after(0, lambda: self.overlay.show_success(expanded_text))
+                    return
+
+                # Fallback for short clips where streaming loop didn't fire
                 if not audio_bytes or len(audio_bytes) < 1000:
                     log_event("Audio too short — returning to dock")
                     if self.overlay.root:
                         self.overlay.root.after(0, self.overlay.dock)
                     return
 
-                # AI Transcription with App-Aware Tone
                 text, latency = self.ai_engine.transcribe_audio(audio_bytes, mode=self.active_context_mode)
                 log_event(f"Gemini transcription ({int(latency*1000)}ms): '{text}'")
 
@@ -189,10 +248,9 @@ class OwnVoiceApp:
                         self.overlay.root.after(0, lambda: self.overlay.show_error("No speech"))
                     return
 
-                # Voice Snippets Expansion
                 expanded_text = self.snippet_engine.expand(text)
-                if expanded_text != text:
-                    log_event(f"Snippets expanded: '{expanded_text}'")
+                self.injector.inject_text(expanded_text)
+                log_event(f"Successfully injected: '{expanded_text[:40]}'")
 
                 self.config.add_history_entry({
                     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -201,10 +259,6 @@ class OwnVoiceApp:
                     "latency": latency
                 })
 
-                # Inject text into active search box / document
-                self.injector.inject_text(expanded_text)
-                log_event(f"Successfully injected: '{expanded_text[:40]}'")
-                
                 if self.config.get("sound_effects", False):
                     sound_effects.play_success()
 
