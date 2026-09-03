@@ -28,6 +28,8 @@ class DummyRoot:
         self._withdrawn = False
     def lift(self):
         pass
+    def attributes(self, *args, **kwargs):
+        pass
 
 class DummyEvent:
     def __init__(self, x, y):

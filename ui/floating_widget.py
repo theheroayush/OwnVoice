@@ -49,6 +49,7 @@ class FloatingWidget:
         self.context_label = ""
         self.is_running = False
         self.anim_thread = None
+        self.anim_timer = None
         self.focus_thread = None
         self.pulse_phase = 0.0
         self.hide_timer = None
@@ -145,22 +146,39 @@ class FloatingWidget:
     def _on_mouse_down(self, event):
         self.drag_start_x = event.x_root
         self.drag_start_y = event.y_root
-        self.win_start_x = self.root.winfo_x()
-        self.win_start_y = self.root.winfo_y()
+        self.win_start_x = self.root.winfo_x() if self.root else 0
+        self.win_start_y = self.root.winfo_y() if self.root else 0
         self.is_dragging = False
+        if self.hwnd:
+            try:
+                ctypes.windll.user32.SetCapture(self.hwnd)
+            except Exception:
+                pass
 
     def _on_mouse_drag(self, event):
         dx = event.x_root - self.drag_start_x
         dy = event.y_root - self.drag_start_y
         if math.hypot(dx, dy) >= 6.0:
-            self.is_dragging = True
+            if not self.is_dragging:
+                self.is_dragging = True
+                if self.hwnd:
+                    try:
+                        ctypes.windll.user32.SetCapture(self.hwnd)
+                    except Exception:
+                        pass
             new_x, new_y = self._clamp_coordinates(self.win_start_x + dx, self.win_start_y + dy)
-            self.root.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
+            if self.root:
+                self.root.geometry(f"{self.width}x{self.height}+{new_x}+{new_y}")
 
     def _on_mouse_up(self, event):
+        try:
+            ctypes.windll.user32.ReleaseCapture()
+        except Exception:
+            pass
+
         if self.is_dragging:
             self.is_dragging = False
-            if self.config:
+            if self.config and self.root:
                 self.config.set("overlay_x", self.root.winfo_x(), save=False)
                 self.config.set("overlay_y", self.root.winfo_y(), save=True)
             return
@@ -214,9 +232,21 @@ class FloatingWidget:
 
     def show(self):
         if self.root:
-            self.root.deiconify()
-            self.root.lift()
-            self.root.attributes("-topmost", True)
+            if hasattr(self.root, "deiconify"):
+                try:
+                    self.root.deiconify()
+                except Exception:
+                    pass
+            if hasattr(self.root, "lift"):
+                try:
+                    self.root.lift()
+                except Exception:
+                    pass
+            if hasattr(self.root, "attributes"):
+                try:
+                    self.root.attributes("-topmost", True)
+                except Exception:
+                    pass
             if self.hwnd:
                 try:
                     ctypes.windll.user32.SetWindowPos(
@@ -243,6 +273,13 @@ class FloatingWidget:
             
             self.canvas.create_rectangle(w - 54, 7, w - 28, h - 7, fill="#161F30", outline="#253248", width=1)
             self.canvas.create_text(w - 41, h//2, text="F8", fill="#38BDF8", font=("Segoe UI", 8, "bold"))
+            self.canvas.create_text(w - 15, h//2, text="✕", fill=close_color, font=("Segoe UI", 9, "bold"))
+
+        elif self.state == "WELCOME":
+            self._create_rounded_rect(2, 2, w - 3, h - 3, r, fill="#0A0D14", outline="#38BDF8", width=1.5)
+            self.canvas.create_oval(10, h//2 - 3.5, 17, h//2 + 3.5, fill="#10B981", outline="")
+            hk = (self.config.get("hotkey", "F8") if self.config else "F8").upper()
+            self.canvas.create_text(24, h//2, text=f"OwnVoice Ready • {hk}", anchor="w", fill="#F8FAFC", font=("Segoe UI", 9, "bold"))
             self.canvas.create_text(w - 15, h//2, text="✕", fill=close_color, font=("Segoe UI", 9, "bold"))
 
         elif self.state == "RECORDING":
@@ -330,11 +367,92 @@ class FloatingWidget:
         if self.root:
             self.hide_timer = self.root.after(2000, self.dock)
 
+    def show_welcome(self):
+        self._clear_hide_timer()
+        self.state = "WELCOME"
+        welcome_w = 195
+        self.width = welcome_w
+        if self.root and self.canvas:
+            try:
+                screen_w = self.root.winfo_screenwidth() if hasattr(self.root, "winfo_screenwidth") else 1920
+                screen_h = self.root.winfo_screenheight() if hasattr(self.root, "winfo_screenheight") else 1080
+                toast_x = (screen_w - self.width) // 2
+                toast_y = max(40, int(screen_h * 0.12))
+                toast_x, toast_y = self._clamp_coordinates(toast_x, toast_y)
+                self.root.geometry(f"{self.width}x{self.height}+{toast_x}+{toast_y}")
+                self.canvas.config(width=self.width, height=self.height)
+            except Exception:
+                pass
+            self._draw_pill()
+            if hasattr(self.root, "after"):
+                self.hide_timer = self.root.after(2500, self.dock)
+
     def dock(self):
         self._clear_hide_timer()
+        was_welcome = (self.state == "WELCOME")
         self.state = "DOCKED"
         self.context_label = ""
-        self._resize(165)
+        target_w = 165
+        if was_welcome and self.root and self.canvas:
+            saved_x = self.config.get("overlay_x") if self.config else None
+            saved_y = self.config.get("overlay_y") if self.config else None
+            screen_w = self.root.winfo_screenwidth() if hasattr(self.root, "winfo_screenwidth") else 1920
+            screen_h = self.root.winfo_screenheight() if hasattr(self.root, "winfo_screenheight") else 1080
+            target_x = saved_x if saved_x is not None else (screen_w - target_w) // 2
+            target_y = saved_y if saved_y is not None else screen_h - self.height - 40
+            target_x, target_y = self._clamp_coordinates(target_x, target_y)
+            self._animate_to_dock(target_x, target_y, target_w)
+        else:
+            self._resize(target_w)
+
+    def _animate_to_dock(self, target_x, target_y, target_w=165):
+        if not self.root or not self.canvas:
+            self._resize(target_w)
+            return
+        try:
+            curr_x = self.root.winfo_x()
+            curr_y = self.root.winfo_y()
+        except Exception:
+            self._resize(target_w)
+            return
+
+        if curr_x == target_x and curr_y == target_y:
+            self._resize(target_w)
+            return
+
+        steps = 8
+        dx = (target_x - curr_x) / steps
+        dy = (target_y - curr_y) / steps
+        self.width = target_w
+        try:
+            self.canvas.config(width=self.width, height=self.height)
+        except Exception:
+            pass
+
+        def step_anim(step=0):
+            if not self.root or self.state != "DOCKED":
+                return
+            if step >= steps:
+                try:
+                    self.root.geometry(f"{self.width}x{self.height}+{target_x}+{target_y}")
+                    self._draw_pill()
+                except Exception:
+                    pass
+                return
+            nx = int(curr_x + dx * (step + 1))
+            ny = int(curr_y + dy * (step + 1))
+            try:
+                self.root.geometry(f"{self.width}x{self.height}+{nx}+{ny}")
+                self._draw_pill()
+            except Exception:
+                pass
+            if hasattr(self.root, "after"):
+                try:
+                    self.root.after(16, lambda: step_anim(step + 1))
+                except Exception:
+                    pass
+
+        step_anim(0)
 
     def _resize(self, new_w):
         self.width = new_w
@@ -356,28 +474,40 @@ class FloatingWidget:
                 pass
             time.sleep(0.1)
 
+    def _tick_anim(self):
+        if not self.is_running or not self.root:
+            return
+        if self.state in ("RECORDING", "PROCESSING"):
+            self.pulse_phase += 0.25
+            self._draw_pill()
+        try:
+            if hasattr(self.root, "after"):
+                self.anim_timer = self.root.after(40, self._tick_anim)
+        except Exception:
+            pass
+
     def _anim_loop(self):
-        while self.is_running:
-            if self.state in ("RECORDING", "PROCESSING"):
-                self.pulse_phase += 0.25
-                if self.root and self.canvas:
-                    try:
-                        self.root.after(0, self._draw_pill)
-                    except Exception:
-                        pass
-            time.sleep(0.04)
+        """Deprecated: Replaced by native Tkinter-driven _tick_anim timer loop."""
+        pass
 
     def start_overlay(self):
         self.is_running = True
         self._create_window()
-        self.anim_thread = threading.Thread(target=self._anim_loop, daemon=True)
-        self.anim_thread.start()
+        self.show()
+        self.show_welcome()
+        self._tick_anim()
         self.focus_thread = threading.Thread(target=self._focus_tracker_loop, daemon=True)
         self.focus_thread.start()
 
     def destroy(self):
         self.is_running = False
         self._clear_hide_timer()
+        if hasattr(self, "anim_timer") and self.anim_timer and self.root and hasattr(self.root, "after_cancel"):
+            try:
+                self.root.after_cancel(self.anim_timer)
+            except Exception:
+                pass
+            self.anim_timer = None
         if self.root:
             try:
                 self.root.destroy()

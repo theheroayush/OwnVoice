@@ -3,7 +3,7 @@ import math
 import struct
 import threading
 import wave
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import sounddevice as sd
@@ -81,6 +81,104 @@ class AudioRecorder:
             pass
         return devices
 
+    @staticmethod
+    def find_device_by_signature(
+        signatures: Optional[Union[str, List[str]]] = None,
+        prefer_wasapi: bool = True
+    ) -> Optional[int]:
+        """
+        Scans available audio endpoints and returns the index of the first valid input device
+        matching the provided name signatures (e.g. 'Qualcomm Aqstic', 'WASAPI').
+        Auto-resolves the correct microphone when integer device index drifts due to
+        USB/Bluetooth headphones connecting or disconnecting.
+        """
+        if signatures is None:
+            signatures = ["Qualcomm Aqstic", "WASAPI"]
+        elif isinstance(signatures, str):
+            signatures = [signatures]
+
+        try:
+            devices = list(sd.query_devices())
+            apis = list(sd.query_hostapis())
+        except Exception:
+            return None
+
+        valid_inputs = []
+        for idx, dev in enumerate(devices):
+            hostapi_id = dev.get("hostapi", -1)
+            api_dict = apis[hostapi_id] if 0 <= hostapi_id < len(apis) else {}
+            if AudioRecorder._is_invalid_or_wdm_ks(dev, api_dict):
+                continue
+            if dev.get("max_input_channels", 0) <= 0:
+                continue
+            api_name = api_dict.get("name", "")
+            dev_name = dev.get("name", "")
+            is_wasapi = "WASAPI" in api_name.upper()
+            valid_inputs.append((idx, dev_name, api_name, is_wasapi))
+
+        for sig in signatures:
+            sig_clean = sig.strip().lower()
+            if not sig_clean:
+                continue
+
+            matches = []
+            for idx, dev_name, api_name, is_wasapi in valid_inputs:
+                d_lower = dev_name.lower()
+                a_lower = api_name.lower()
+                if sig_clean in d_lower or sig_clean in a_lower:
+                    matches.append((idx, is_wasapi))
+
+            if matches:
+                if prefer_wasapi:
+                    matches.sort(key=lambda m: 0 if m[1] else 1)
+                return matches[0][0]
+
+        return None
+
+    def resolve_device_index(
+        self,
+        preferred_index: Optional[int] = None,
+        signatures: Optional[Union[str, List[str]]] = None
+    ) -> Optional[int]:
+        """
+        Resolves the microphone device index with signature matching resilience.
+        If preferred_index is invalid or has drifted to a different device,
+        returns the auto-resolved signature device index.
+        """
+        try:
+            devices = list(sd.query_devices())
+        except Exception:
+            devices = []
+
+        sig_list = []
+        if signatures:
+            if isinstance(signatures, str):
+                sig_list.append(signatures)
+            else:
+                sig_list.extend(signatures)
+
+        if self.config_manager:
+            cfg_name = self.config_manager.get("input_device_name", None)
+            if cfg_name:
+                sig_list.append(cfg_name)
+
+        sig_list.extend(["Qualcomm Aqstic", "WASAPI"])
+
+        # Check if preferred_index is valid and still matches target signature
+        if preferred_index is not None and 0 <= preferred_index < len(devices):
+            d = devices[preferred_index]
+            if not self._is_invalid_or_wdm_ks(d) and d.get("max_input_channels", 0) > 0:
+                dev_name_lower = d.get("name", "").lower()
+                for s in sig_list:
+                    if s.lower() != "wasapi" and s.lower() in dev_name_lower:
+                        return preferred_index
+
+        matched = self.find_device_by_signature(sig_list)
+        if matched is not None:
+            return matched
+
+        return preferred_index
+
     def _get_fallback_candidates(self, preferred_index=None):
         """
         Builds prioritized list of (device_index, channels, samplerate):
@@ -128,21 +226,30 @@ class AudioRecorder:
                 ch = channels or 2
                 candidates.append((idx, ch, sr))
 
-        # 1. User-configured device
+        # 1. User-configured device / signature matching (Qualcomm Aqstic / WASAPI)
+        cfg_name = self.config_manager.get("input_device_name", None) if self.config_manager else None
+        cfg_idx = self.config_manager.get("input_device_index", None) if self.config_manager else None
+
+        sig_list = []
+        if cfg_name:
+            sig_list.append(cfg_name)
+        sig_list.extend(["Qualcomm Aqstic", "WASAPI"])
+
+        matched_sig_idx = self.find_device_by_signature(sig_list)
+
         if preferred_index is not None:
-            add_candidate(preferred_index)
-        elif self.config_manager:
-            cfg_name = self.config_manager.get("input_device_name", None)
-            cfg_idx = self.config_manager.get("input_device_index", None)
-            matched = False
-            if cfg_name:
-                for idx, d in enumerate(devices):
-                    if not is_wdm_ks(idx) and d.get("max_input_channels", 0) > 0:
-                        if cfg_name.lower() in d.get("name", "").lower():
-                            add_candidate(idx)
-                            matched = True
-                            break
-            if not matched and cfg_idx is not None:
+            if 0 <= preferred_index < len(devices) and not is_wdm_ks(preferred_index) and devices[preferred_index].get("max_input_channels", 0) > 0:
+                add_candidate(preferred_index)
+                if matched_sig_idx is not None and matched_sig_idx != preferred_index:
+                    add_candidate(matched_sig_idx)
+            elif matched_sig_idx is not None:
+                add_candidate(matched_sig_idx)
+            else:
+                add_candidate(preferred_index)
+        else:
+            if matched_sig_idx is not None:
+                add_candidate(matched_sig_idx)
+            elif cfg_idx is not None:
                 add_candidate(cfg_idx)
 
         # 2. Windows Default WASAPI Input Device @ 48kHz stereo (fallback 48kHz mono)

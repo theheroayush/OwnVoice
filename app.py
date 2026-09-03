@@ -38,8 +38,46 @@ def log_event(msg: str):
     except Exception:
         pass
 
+def ensure_default_desktop() -> bool:
+    """
+    Guarantees the process and calling thread are bound to the user's interactive
+    desktop ('WinSta0' / 'Default'). Prevents UIPI / session isolation failures
+    when launched from background tasks, services, or shortcuts.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        u32 = ctypes.WinDLL("user32", use_last_error=True)
+
+        ACCESS_MAX = 0x02000000  # MAXIMUM_ALLOWED
+
+        u32.OpenWindowStationW.argtypes = [wintypes.LPCWSTR, wintypes.BOOL, wintypes.DWORD]
+        u32.OpenWindowStationW.restype = wintypes.HANDLE
+        u32.SetProcessWindowStation.argtypes = [wintypes.HANDLE]
+        u32.SetProcessWindowStation.restype = wintypes.BOOL
+        u32.OpenDesktopW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        u32.OpenDesktopW.restype = wintypes.HANDLE
+        u32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
+        u32.SetThreadDesktop.restype = wintypes.BOOL
+
+        h_winsta = u32.OpenWindowStationW("WinSta0", False, ACCESS_MAX)
+        if h_winsta:
+            u32.SetProcessWindowStation(h_winsta)
+
+        h_desk = u32.OpenDesktopW("Default", 0, False, ACCESS_MAX)
+        if h_desk:
+            u32.SetThreadDesktop(h_desk)
+
+        log_event("Interactive desktop bound successfully (WinSta0 / Default).")
+        return bool(h_winsta and h_desk)
+    except Exception as e:
+        log_event(f"ensure_default_desktop notice: {e}")
+        return False
+
 class OwnVoiceApp:
     def __init__(self):
+        ensure_default_desktop()
         log_event("Starting OwnVoice Engine...")
         self.config = config_manager
         self.audio_recorder = AudioRecorder()
@@ -122,6 +160,8 @@ class OwnVoiceApp:
 
     def on_recording_stop(self):
         log_event("Recording stopped. Processing audio...")
+        if self.settings_ui and hasattr(self.settings_ui, "resume_vu_monitor"):
+            self.settings_ui.resume_vu_monitor()
         if self.config.get("sound_effects", False):
             sound_effects.play_stop()
 
@@ -183,6 +223,8 @@ class OwnVoiceApp:
     def cancel_dictation(self):
         log_event("Recording cancelled by user via ✕ button.")
         self.audio_recorder.stop_recording()
+        if self.settings_ui and hasattr(self.settings_ui, "resume_vu_monitor"):
+            self.settings_ui.resume_vu_monitor()
         if self.overlay.root:
             self.overlay.root.after(0, self.overlay.dock)
 
@@ -238,6 +280,7 @@ class OwnVoiceApp:
 
     def run(self):
         try:
+            ensure_default_desktop()
             log_event("Starting HotkeyManager...")
             self.hotkey_manager.start()
             log_event("Starting Tray Icon...")
@@ -258,6 +301,7 @@ class OwnVoiceApp:
 
 if __name__ == "__main__":
     try:
+        ensure_default_desktop()
         app = OwnVoiceApp()
         app.run()
     except Exception as e:

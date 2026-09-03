@@ -13,6 +13,7 @@ INPUT_KEYBOARD = 1
 VK_CONTROL = 0x11
 VK_V = 0x56
 VK_MENU = 0x12
+VK_ESCAPE = 0x1B
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_UNICODE = 0x0004
 CF_UNICODETEXT = 13
@@ -135,34 +136,42 @@ class CursorInjector:
             return False
 
         try:
-            cur_thread = kernel32.GetCurrentThreadId()
             fg_hwnd = user32.GetForegroundWindow()
+            if fg_hwnd == self.last_target_hwnd:
+                return True
+
+            cur_thread = kernel32.GetCurrentThreadId()
             fg_thread = user32.GetWindowThreadProcessId(fg_hwnd, None) if fg_hwnd else 0
             target_thread = user32.GetWindowThreadProcessId(self.last_target_hwnd, None)
 
             attached_fg = False
-            if fg_thread and fg_thread != cur_thread:
-                user32.AttachThreadInput(cur_thread, fg_thread, True)
-                attached_fg = True
-
             attached_target = False
-            if target_thread and target_thread != cur_thread:
-                user32.AttachThreadInput(cur_thread, target_thread, True)
-                attached_target = True
+            try:
+                if fg_thread and fg_thread != cur_thread:
+                    user32.AttachThreadInput(cur_thread, fg_thread, True)
+                    attached_fg = True
 
-            user32.keybd_event(VK_MENU, 0, 0, 0)
-            user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+                if target_thread and target_thread != cur_thread:
+                    user32.AttachThreadInput(cur_thread, target_thread, True)
+                    attached_target = True
 
-            if user32.IsIconic(self.last_target_hwnd):
-                user32.ShowWindow(self.last_target_hwnd, SW_RESTORE)
+                # Pulse VK_MENU to bypass foreground locks
+                user32.keybd_event(VK_MENU, 0, 0, 0)
+                user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+                # Immediately pulse VK_ESCAPE so document menu ribbon is never left active
+                user32.keybd_event(VK_ESCAPE, 0, 0, 0)
+                user32.keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0)
 
-            user32.SetForegroundWindow(self.last_target_hwnd)
-            user32.BringWindowToTop(self.last_target_hwnd)
+                if user32.IsIconic(self.last_target_hwnd):
+                    user32.ShowWindow(self.last_target_hwnd, SW_RESTORE)
 
-            if attached_fg:
-                user32.AttachThreadInput(cur_thread, fg_thread, False)
-            if attached_target:
-                user32.AttachThreadInput(cur_thread, target_thread, False)
+                user32.SetForegroundWindow(self.last_target_hwnd)
+                user32.BringWindowToTop(self.last_target_hwnd)
+            finally:
+                if attached_fg:
+                    user32.AttachThreadInput(cur_thread, fg_thread, False)
+                if attached_target:
+                    user32.AttachThreadInput(cur_thread, target_thread, False)
 
             return True
         except Exception as e:
@@ -223,7 +232,8 @@ class CursorInjector:
                     finally:
                         user32.CloseClipboard()
             time.sleep(0.01 * (attempt + 1))
-        return True
+        self._last_clip_op_real_win32 = False
+        return False
 
     def _send_ctrl_v(self) -> bool:
         inputs = (INPUT * 4)()
@@ -299,9 +309,9 @@ class CursorInjector:
         time.sleep(0.05)
 
         orig_clip = self.get_clipboard_text()
-        self.set_clipboard_text(text)
+        clip_ok = self.set_clipboard_text(text)
 
-        if not getattr(self, "_last_clip_op_real_win32", False):
+        if not clip_ok or not getattr(self, "_last_clip_op_real_win32", False):
             # Real OS clipboard was inaccessible (e.g. access denied / locked).
             # Direct Unicode typing fallback via SendInput KEYEVENTF_UNICODE!
             return self._send_unicode_string(text)
@@ -309,7 +319,8 @@ class CursorInjector:
         time.sleep(0.03)
         self._send_ctrl_v()
 
-        time.sleep(0.075)
+        # 250ms post-paste delay so heavy apps (Word, Chrome, Electron) have time to process WM_PASTE before clipboard restore
+        time.sleep(0.25)
         if orig_clip:
             self.set_clipboard_text(orig_clip)
 

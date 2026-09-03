@@ -357,5 +357,138 @@ class TestUIAudit(unittest.TestCase):
         self.assertFalse(self.widget.is_running)
         self.assertIsNone(self.widget.root)
 
+    # =========================================================================
+    # 6. Hardened UI Features: Welcome Toast, Capture, Tick Anim, Test Key, Yield
+    # =========================================================================
+    def test_welcome_toast_lifecycle_and_auto_dock(self):
+        """Verify startup welcome toast displays 'OwnVoice Ready • F8' and auto-docks to saved position."""
+        self.config.set("overlay_x", 320, save=False)
+        self.config.set("overlay_y", 480, save=False)
+        self.widget._create_window()
+        self.widget.show_welcome()
+
+        self.assertEqual(self.widget.state, "WELCOME")
+        self.assertIsNotNone(self.widget.hide_timer)
+        self.assertGreaterEqual(self.widget.width, 180)
+
+        # Trigger dock
+        self.widget.dock()
+        self.assertEqual(self.widget.state, "DOCKED")
+        self.assertEqual(self.widget.width, 165)
+
+    def test_mouse_drag_pointer_capture_and_release(self):
+        """Verify Win32 SetCapture and ReleaseCapture guard mouse dragging against pointer loss."""
+        self.widget._create_window()
+
+        # Down triggers capture without dragging
+        ev_down = DummyEvent(10, 10, x_root=200, y_root=200)
+        self.widget._on_mouse_down(ev_down)
+        self.assertFalse(self.widget.is_dragging)
+
+        # Drag >= 6px triggers drag
+        ev_drag = DummyEvent(20, 20, x_root=210, y_root=210)
+        self.widget._on_mouse_drag(ev_drag)
+        self.assertTrue(self.widget.is_dragging)
+
+        # Up triggers ReleaseCapture
+        ev_up = DummyEvent(20, 20, x_root=210, y_root=210)
+        self.widget._on_mouse_up(ev_up)
+        self.assertFalse(self.widget.is_dragging)
+
+    def test_native_tick_anim_loop_no_daemon_thread_flooding(self):
+        """Verify native Tk-driven _tick_anim loop is used without 25Hz thread flooding."""
+        self.widget._create_window()
+        self.widget.is_running = True
+        self.widget.state = "RECORDING"
+        initial_phase = self.widget.pulse_phase
+
+        self.widget._tick_anim()
+        self.assertGreater(self.widget.pulse_phase, initial_phase)
+        self.assertIsNotNone(self.widget.anim_timer)
+
+        # Stop and verify timer cancelled cleanly
+        self.widget.destroy()
+        self.assertIsNone(self.widget.anim_timer)
+
+    def test_settings_test_key_valid_and_invalid_ping(self):
+        """Verify Test Key button invokes lightweight test and sets green/red label."""
+        class MockAIEngine:
+            def __init__(self, valid_keys=None):
+                self.valid_keys = valid_keys or {"VALID_TEST_KEY_123"}
+            def test_key(self, key):
+                if key in self.valid_keys:
+                    return True, "Valid Key"
+                return False, "Invalid Key"
+            def test_connection(self, key):
+                if key in self.valid_keys:
+                    return True, "Connected to gemini-3.5-flash-lite! (45ms)", 0.045
+                return False, "Invalid API Key. Please check your key.", 0.05
+
+        mock_ai = MockAIEngine()
+        settings = SettingsWindow(
+            config_manager=self.config,
+            ai_engine=mock_ai,
+            audio_recorder=self.audio_recorder
+        )
+        settings.show()
+        self.assertIsNotNone(settings.test_key_btn)
+        self.assertIsNotNone(settings.key_status_label)
+
+        # Test with invalid key
+        settings.api_entry.delete(0, "end")
+        settings.api_entry.insert(0, "BAD_KEY")
+        settings._test_key()
+        for _ in range(50):
+            if settings.window:
+                try:
+                    settings.window.update()
+                except Exception:
+                    pass
+            if settings.key_status_label.cget("text") not in ("", "Testing Key..."):
+                break
+            time.sleep(0.02)
+        self.assertEqual(settings.key_status_label.cget("text"), "Invalid Key")
+        self.assertEqual(settings.key_status_label.cget("text_color"), "#EF4444")
+
+        # Test with valid key
+        settings.api_entry.delete(0, "end")
+        settings.api_entry.insert(0, "VALID_TEST_KEY_123")
+        settings._test_key()
+        for _ in range(50):
+            if settings.window:
+                try:
+                    settings.window.update()
+                except Exception:
+                    pass
+            if settings.key_status_label.cget("text") not in ("", "Testing Key..."):
+                break
+            time.sleep(0.02)
+        self.assertEqual(settings.key_status_label.cget("text"), "Valid Key")
+        self.assertEqual(settings.key_status_label.cget("text_color"), "#10B981")
+
+        settings._on_close()
+
+    def test_settings_vu_monitor_yields_to_active_dictation(self):
+        """Verify VU monitor in Settings cleanly yields to active dictation and pauses updates."""
+        settings = SettingsWindow(
+            config_manager=self.config,
+            ai_engine=None,
+            audio_recorder=self.audio_recorder
+        )
+        settings.show()
+        self.assertFalse(settings._vu_paused)
+
+        # Signal dictation start
+        settings.stop_vu_monitor()
+        self.assertTrue(settings._vu_paused)
+        # Unified stream is NOT stopped
+        self.assertTrue(self.audio_recorder.is_monitoring)
+
+        # Signal dictation stop
+        settings.resume_vu_monitor()
+        self.assertFalse(settings._vu_paused)
+
+        settings._on_close()
+
 if __name__ == "__main__":
     unittest.main()

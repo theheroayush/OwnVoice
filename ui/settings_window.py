@@ -17,7 +17,10 @@ class SettingsWindow:
         self.is_open = False
         self.test_stream = None
         self.test_running = False
+        self._vu_paused = False
         self.dev_map = {}
+        self.test_key_btn = None
+        self.key_status_label = None
 
     def show(self):
         if self.is_open and self.window:
@@ -127,9 +130,26 @@ class SettingsWindow:
 
         # ----------------- Tab 3: AI Engine -----------------
         ctk.CTkLabel(tab_ai, text="Google AI Studio Gemini API Key:", font=ctk.CTkFont(weight="bold", size=14)).pack(anchor="w", padx=15, pady=(15, 5))
-        self.api_entry = ctk.CTkEntry(tab_ai, placeholder_text="Enter API Key", show="*")
+        
+        key_input_row = ctk.CTkFrame(tab_ai, fg_color="transparent")
+        key_input_row.pack(fill="x", padx=15, pady=(0, 6))
+
+        self.api_entry = ctk.CTkEntry(key_input_row, placeholder_text="Enter API Key", show="*")
         self.api_entry.insert(0, self.config.get("google_api_key", ""))
-        self.api_entry.pack(fill="x", padx=15, pady=(0, 10))
+        self.api_entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        self.test_key_btn = ctk.CTkButton(
+            key_input_row,
+            text="🔑 Test Key",
+            command=self._test_key,
+            width=110,
+            fg_color="#0284C7",
+            hover_color="#0369A1"
+        )
+        self.test_key_btn.pack(side="right")
+
+        self.key_status_label = ctk.CTkLabel(tab_ai, text="", font=ctk.CTkFont(size=12, weight="bold"))
+        self.key_status_label.pack(anchor="w", padx=15, pady=(0, 8))
 
         btn_row = ctk.CTkFrame(tab_ai, fg_color="transparent")
         btn_row.pack(anchor="w", padx=15, pady=5)
@@ -202,20 +222,31 @@ class SettingsWindow:
         self.config.set("auto_context", self.auto_ctx_var.get())
 
     def stop_vu_monitor(self):
-        """No-op in unified stream architecture to prevent VU meter thread death."""
-        pass
+        """Cleanly yields VU meter updates during active dictation without disrupting the unified stream."""
+        self._vu_paused = True
+
+    def resume_vu_monitor(self):
+        """Resumes VU meter updates once active dictation completes."""
+        self._vu_paused = False
 
     def _start_vu_monitor(self):
         self.test_running = True
+        self._vu_paused = False
         
         def monitor():
             import time
             while self.test_running and self.is_open:
+                # Cleanly yield to active dictation to prevent audio device contention or UI queue flooding
+                is_rec = getattr(self.audio_recorder, "is_recording", False) if self.audio_recorder else False
+                if self._vu_paused or is_rec:
+                    time.sleep(0.08)
+                    continue
+
                 if self.audio_recorder:
                     vol = self.audio_recorder.get_current_volume()
                     if self.window and self.vu_progress:
                         def safe_set(v=vol):
-                            if self.is_open and self.window and self.vu_progress:
+                            if self.is_open and self.window and self.vu_progress and not self._vu_paused:
                                 try:
                                     self.vu_progress.set(v)
                                 except Exception:
@@ -233,7 +264,7 @@ class SettingsWindow:
         if idx is not None:
             self.config.set("input_device_index", idx)
             self.config.set("input_device_name", choice)
-            if self.audio_recorder and not self.audio_recorder.is_recording:
+            if self.audio_recorder and not getattr(self.audio_recorder, "is_recording", False):
                 self.audio_recorder.stop_monitoring()
                 self.audio_recorder.start_monitoring(device_index=idx)
 
@@ -243,21 +274,116 @@ class SettingsWindow:
             self.on_settings_changed()
 
     def _save_api_key(self):
-        k = self.api_entry.get().strip()
+        k = self.api_entry.get().strip() if self.api_entry else ""
         self.config.set("google_api_key", k)
         self.api_status.configure(text="Key saved! ✓", text_color="#10B981")
 
+    def _set_key_status_ui(self, text: str, is_valid: bool = None):
+        if is_valid is True:
+            color = "#10B981"  # clear green
+        elif is_valid is False:
+            color = "#EF4444"  # clear red
+        else:
+            color = "#38BDF8"  # blue/testing
+
+        if hasattr(self, "key_status_label") and self.key_status_label:
+            try:
+                self.key_status_label.configure(text=text, text_color=color)
+            except Exception:
+                pass
+        if hasattr(self, "api_status") and self.api_status:
+            try:
+                self.api_status.configure(text=text, text_color=color)
+            except Exception:
+                pass
+
+    def _test_key(self):
+        k = self.api_entry.get().strip() if self.api_entry else ""
+        if not k:
+            self._set_key_status_ui("Invalid Key", False)
+            return
+
+        self._set_key_status_ui("Testing Key...", None)
+        self._key_test_result = None
+
+        def ping():
+            is_valid = False
+            msg = "Invalid Key"
+            try:
+                if self.ai_engine and hasattr(self.ai_engine, "test_key"):
+                    is_valid, msg = self.ai_engine.test_key(k)
+                elif self.ai_engine and hasattr(self.ai_engine, "test_connection"):
+                    ok, conn_msg, _ = self.ai_engine.test_connection(k)
+                    is_valid = ok
+                    msg = "Valid Key" if ok else "Invalid Key"
+                else:
+                    import requests
+                    r = requests.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={k}", timeout=5)
+                    is_valid = (r.status_code == 200)
+                    msg = "Valid Key" if is_valid else "Invalid Key"
+            except Exception:
+                is_valid = False
+                msg = "Invalid Key"
+            self._key_test_result = (is_valid, msg)
+
+        def poll_result():
+            if not self.is_open or not self.window:
+                return
+            if getattr(self, "_key_test_result", None) is not None:
+                valid, msg = self._key_test_result
+                self._set_key_status_ui(msg, valid)
+            else:
+                try:
+                    self.window.after(20, poll_result)
+                except Exception:
+                    pass
+
+        threading.Thread(target=ping, daemon=True).start()
+        if self.window:
+            try:
+                self.window.after(20, poll_result)
+            except Exception:
+                pass
+
     def _test_connection(self):
         self.api_status.configure(text="Testing...", text_color="#38BDF8")
+        self._conn_test_result = None
+        key = self.api_entry.get().strip() if self.api_entry else ""
+
         def run():
-            s, m, l = self.ai_engine.test_connection(self.api_entry.get().strip())
-            color = "#10B981" if s else "#EF4444"
-            if self.window and self.api_status:
-                self.api_status.configure(text=m, text_color=color)
+            try:
+                s, m, l = self.ai_engine.test_connection(key)
+                color = "#10B981" if s else "#EF4444"
+                self._conn_test_result = (m, color)
+            except Exception as e:
+                self._conn_test_result = (str(e), "#EF4444")
+
+        def poll_conn():
+            if not self.is_open or not self.window:
+                return
+            if getattr(self, "_conn_test_result", None) is not None:
+                msg, color = self._conn_test_result
+                if self.api_status:
+                    try:
+                        self.api_status.configure(text=msg, text_color=color)
+                    except Exception:
+                        pass
+            else:
+                try:
+                    self.window.after(20, poll_conn)
+                except Exception:
+                    pass
+
         threading.Thread(target=run, daemon=True).start()
+        if self.window:
+            try:
+                self.window.after(20, poll_conn)
+            except Exception:
+                pass
 
     def _on_close(self):
         self.test_running = False
+        self._vu_paused = False
         self.is_open = False
         if self.audio_recorder:
             self.audio_recorder.stop_monitoring()

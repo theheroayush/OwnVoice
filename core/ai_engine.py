@@ -204,3 +204,25 @@ class AIEngine:
                 continue
 
         return False, "Connection test failed across Gemini models.", 0.0
+
+    def test_key(self, api_key: str = None) -> Tuple[bool, str]:
+        """Fast lightweight ping to Google AI Studio to validate an API key."""
+        if not api_key:
+            api_key = self.config.get("google_api_key", "").strip()
+        if not api_key:
+            return False, "Invalid Key"
+
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            resp = self.session.get(url, timeout=5)
+            if resp.status_code == 200:
+                return True, "Valid Key"
+            elif resp.status_code in (400, 401, 403):
+                return False, "Invalid Key"
+            else:
+                ok, _, _ = self.test_connection(api_key)
+                return (True, "Valid Key") if ok else (False, "Invalid Key")
+        except Exception:
+            ok, _, _ = self.test_connection(api_key)
+            return (True, "Valid Key") if ok else (False, "Invalid Key")
+

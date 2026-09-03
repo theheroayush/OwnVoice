@@ -37,8 +37,9 @@ class HotkeyManager:
         self.is_active = False
         self.current_keys = set()
         self.listener = None
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.last_toggle_time = 0.0
+        self.last_ptt_time = 0.0
 
     def sync_state(self, is_recording: bool):
         """Synchronizes internal hotkey state with authoritative recorder / UI state."""
@@ -48,7 +49,7 @@ class HotkeyManager:
     def _trigger_toggle(self):
         now = time.monotonic()
         if now - self.last_toggle_time < 0.35:
-            return  # 350ms minimum debounce
+            return  # 350ms minimum debounce for toggle mode
         self.last_toggle_time = now
 
         if not self.is_active:
@@ -60,18 +61,20 @@ class HotkeyManager:
 
     def _trigger_start(self):
         now = time.monotonic()
-        if now - self.last_toggle_time < 0.35:
+        if now - self.last_ptt_time < 0.15:  # 150ms debounce for push-to-talk start
             return
-        self.last_toggle_time = now
+        self.last_ptt_time = now
 
         if not self.is_active:
             self.is_active = True
             threading.Thread(target=self.on_start, daemon=True).start()
 
     def _trigger_stop(self):
-        if self.is_active:
-            self.is_active = False
-            threading.Thread(target=self.on_stop, daemon=True).start()
+        with self.lock:
+            if self.is_active:
+                self.is_active = False
+                self.last_ptt_time = time.monotonic()
+                threading.Thread(target=self.on_stop, daemon=True).start()
 
     def _get_target_vk(self) -> Optional[int]:
         hotkey_str = (self.config.get("hotkey", "f8") if self.config else "f8").lower().replace(" ", "")
@@ -87,6 +90,8 @@ class HotkeyManager:
         """
         Suppresses single-key hotkeys (F8/F9/CapsLock) from passing to foreground applications
         to prevent alert dings and Word extend-selection alerts, while dropping OS auto-repeat events.
+        Returns False cleanly to drop the key from pynput without raising exceptions that unwind
+        into the Windows kernel DispatchMessage callback.
         """
         try:
             target_vk = self._get_target_vk()
@@ -99,15 +104,8 @@ class HotkeyManager:
 
                 if msg in (WM_KEYDOWN, WM_SYSKEYDOWN):
                     with self.lock:
-                        now = time.monotonic()
-                        # Drop OS auto-repeat events if key is already held within debounce window
-                        if key_obj in self.current_keys and (now - self.last_toggle_time < 0.35):
-                            if self.listener:
-                                try:
-                                    self.listener.suppress_event()
-                                except Exception as e:
-                                    if "Suppress" in type(e).__name__:
-                                        raise
+                        # Drop OS auto-repeat events if key is already held
+                        if key_obj in self.current_keys:
                             return False
 
                         self.current_keys.add(key_obj)
@@ -122,19 +120,12 @@ class HotkeyManager:
                         if mode == "push_to_talk":
                             self._trigger_stop()
 
-                # Suppress keystroke in Windows low-level hook
-                if self.listener:
-                    try:
-                        self.listener.suppress_event()
-                    except Exception as e:
-                        if "Suppress" in type(e).__name__:
-                            raise
+                # Return False cleanly to drop the key from pynput without raising any exception
                 return False
 
             return True
-        except Exception as e:
-            if "Suppress" in type(e).__name__:
-                raise
+        except Exception:
+            # Never let any exception escape into the Windows low-level hook callback
             return True
 
     def _is_hotkey_triggered(self, key=None) -> bool:
