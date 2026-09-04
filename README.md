@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <h1 align="center">🎙️ OwnVoice</h1>
   <p align="center">
     <strong>The Supercharged Voice-to-Text Typing Assistant for Windows</strong><br />
@@ -11,6 +11,17 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/theheroayush/OwnVoice/releases/download/v1.0.0/OwnVoice-v1.0.0-Windows-ARM64.zip">
+    <img src="https://img.shields.io/badge/Download-OwnVoice_v1.0.0_(Windows)-2563EB?style=for-the-badge&logo=windows&logoColor=white" alt="Download OwnVoice" />
+  </a>
+  <a href="https://github.com/theheroayush/OwnVoice/releases/tag/v1.0.0">
+    <img src="https://img.shields.io/badge/Release-v1.0.0-10B981?style=for-the-badge&logo=github&logoColor=white" alt="Release v1.0.0" />
+  </a>
+  <img src="https://img.shields.io/badge/Privacy-Private_Repo-6B7280?style=for-the-badge&logo=lock&logoColor=white" alt="Private Repository" />
+</p>
+
+<p align="center">
+  <a href="#-direct-download-ready-to-use">Direct Download</a> •
   <a href="#-what-is-ownvoice">What is OwnVoice?</a> •
   <a href="#-why-youll-love-it-key-benefits">Key Benefits</a> •
   <a href="#-core-features--capabilities">Core Features</a> •
@@ -21,6 +32,18 @@
 </p>
 
 ---
+
+## 📦 Direct Download (Ready to Use)
+
+If you have been granted access to this private repository, you can download and run OwnVoice immediately without installing Python or compilers:
+
+- **Option 1 (GitHub Releases)**: Click the button above or go to [**Releases v1.0.0**](https://github.com/theheroayush/OwnVoice/releases/tag/v1.0.0) and download `OwnVoice-v1.0.0-Windows-ARM64.zip`.
+- **Option 2 (Direct Repository File)**: Download directly from the repository at [`releases/OwnVoice-v1.0.0-Windows-ARM64.zip`](releases/OwnVoice-v1.0.0-Windows-ARM64.zip).
+
+**How to run it:**
+1. Extract the `.zip` folder anywhere on your computer.
+2. Double-click **`OwnVoice.exe`**.
+3. Press **`F8`** anywhere on Windows to start dictating!
 
 ## 🌟 What is OwnVoice?
 
