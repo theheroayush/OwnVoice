@@ -59,6 +59,16 @@ class ContextDetector:
         "skype.exe", "element.exe"
     }
 
+    BROWSER_PROCESSES = {
+        "chrome.exe", "msedge.exe", "brave.exe", "firefox.exe",
+        "opera.exe", "vivaldi.exe", "arc.exe"
+    }
+
+    SEARCH_KEYWORDS = (
+        "google search", " - google", "youtube", "amazon",
+        "flipkart", "bing search", "duckduckgo", " - search"
+    )
+
     @staticmethod
     def get_window_info(hwnd: int) -> Tuple[str, str]:
         """Returns (process_name, window_title) for a given HWND."""
@@ -127,7 +137,13 @@ class ContextDetector:
             "messenger" in title_lower):
             return "chat", "Chat"
 
-        # 4. Document / Editing tools (including UWP Notepad & Word)
+        # 4. Search engine & query detection
+        if (exe in cls.BROWSER_PROCESSES and any(kw in title_lower for kw in cls.SEARCH_KEYWORDS)) or (
+            "google search" in title_lower or "bing search" in title_lower or "duckduckgo" in title_lower
+        ):
+            return "search", "Search"
+
+        # 5. Document / Editing tools (including UWP Notepad & Word)
         if (exe in cls.DOCUMENT_PROCESSES or
             "google docs" in title_lower or
             " - word" in title_lower or

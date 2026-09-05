@@ -85,6 +85,7 @@ class OwnVoiceApp:
         self.injector = CursorInjector(self.config)
         self.snippet_engine = SnippetEngine(self.config)
         self.overlay_visible = True
+        sound_effects.enabled = self.config.get("sound_effects", True)
         self.active_context_mode = "smart_flow"
         self.active_context_label = ""
 

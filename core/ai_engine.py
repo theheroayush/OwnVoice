@@ -48,14 +48,32 @@ DICTATION_PROMPTS = {
         "Transcribe the spoken audio into concise markdown bullet points (- Item). "
         "Output ONLY the bulleted list. "
         "If there is no speech, silence, or only background noise, output ABSOLUTELY NOTHING."
+    ),
+    "search": (
+        "You are a search query assistant. Transcribe the spoken audio into a crisp, concise search query. "
+        "Strip conversational fluff (like 'Can you search for', 'Please find me', 'I want to see'). "
+        "Output ONLY the essential search keywords with zero punctuation or preamble. "
+        "If there is no speech, silence, or only background noise, output ABSOLUTELY NOTHING."
+    ),
+    "translate_hindi": (
+        "You are an expert real-time English-to-Hindi translator. Translate whatever is spoken in English "
+        "into natural, fluent Hindi (written in Devanagari script). "
+        "Output ONLY the translated Hindi text with zero explanations or preamble. "
+        "If there is no speech, silence, or only background noise, output ABSOLUTELY NOTHING."
+    ),
+    "translate_english": (
+        "You are an expert real-time Hindi-to-English translator. Translate whatever is spoken in Hindi or Hinglish "
+        "into natural, fluent, professional English. "
+        "Output ONLY the translated English text with zero explanations or preamble. "
+        "If there is no speech, silence, or only background noise, output ABSOLUTELY NOTHING."
     )
 }
 
 FALLBACK_MODELS = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3-flash-preview",
-    "gemini-2.5-flash"
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b"
 ]
 
 SILENCE_ARTIFACTS = {
@@ -67,7 +85,7 @@ SILENCE_ARTIFACTS = {
 class AIEngine:
     def __init__(self, config_manager):
         self.config = config_manager
-        self.working_model = self.config.get("model", "gemini-3.5-flash-lite")
+        self.working_model = self.config.get("model", "gemini-2.5-flash")
         self.session = requests.Session()
         adapter = HTTPAdapter(pool_connections=5, pool_maxsize=10)
         self.session.mount("https://", adapter)
@@ -109,9 +127,25 @@ class AIEngine:
             mode = self.config.get("dictation_mode", "smart_flow")
 
         system_instruction = DICTATION_PROMPTS.get(mode, DICTATION_PROMPTS["smart_flow"])
+
+        # Mid-Sentence Self-Correction & Spoken Commands (Version 2.0)
+        if self.config.get("self_correction", True):
+            system_instruction += (
+                "\n\nSELF-CORRECTION & SPOKEN COMMANDS:\n"
+                "- If the speaker corrects themselves mid-sentence (e.g. 'meet at 4, actually make it 5 PM', "
+                "'send to Bob, I mean Alice'), intelligently output ONLY the final corrected thought.\n"
+                "- If the speaker explicitly says 'new line' or 'next line', insert a newline (\\n). "
+                "If they say 'new paragraph', insert two newlines (\\n\\n)."
+            )
+
+        # Personal Vocabulary Bank (Version 2.0)
+        vocab = self.config.get_vocabulary() if hasattr(self.config, "get_vocabulary") else self.config.get("vocabulary", [])
+        if vocab:
+            system_instruction += f"\n\nPRIORITIZED VOCABULARY & NAMES (use exact spelling):\n{', '.join(vocab)}"
+
         custom_instructions = self.config.get("custom_instructions", "").strip()
         if custom_instructions:
-            system_instruction += f"\n\nUser Vocabulary / Jargon:\n{custom_instructions}"
+            system_instruction += f"\n\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions}"
 
         audio_b64 = base64.b64encode(audio_wav_bytes).decode("utf-8")
         models_to_try = [self.working_model] + [m for m in FALLBACK_MODELS if m != self.working_model]

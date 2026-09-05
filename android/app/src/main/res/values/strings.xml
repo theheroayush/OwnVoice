@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">OwnVoice</string>
+    <string name="subtype_en_us">English (US) - Voice Dictation</string>
+    <string name="subtype_en_in">English (India) - Voice Dictation</string>
+    <string name="subtype_voice">OwnVoice Dictation</string>
+    <string name="accessibility_service_description">OwnVoice uses Accessibility to detect focused text fields and type voice-transcribed text directly into your active apps when using the floating bubble.</string>
+    <string name="bubble_notification_title">OwnVoice Floating Bubble Active</string>
+    <string name="bubble_notification_desc">Tap the floating bubble anywhere on screen to speak and type.</string>
+    <string name="recording_notification_title">OwnVoice Recording…</string>
+    <string name="recording_notification_desc">Listening to your voice. Tap to stop.</string>
+</resources>

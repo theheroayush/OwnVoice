@@ -43,6 +43,7 @@ class SettingsWindow:
 
         tab_general = tabview.add("⚡ General & Audio")
         tab_snippets = tabview.add("✂️ Voice Snippets")
+        tab_vocab = tabview.add("🧠 Personal Vocabulary")
         tab_ai = tabview.add("🔑 Gemini AI Engine")
         tab_history = tabview.add("📜 History")
 
@@ -90,24 +91,53 @@ class SettingsWindow:
         self.auto_ctx_var = ctk.BooleanVar(value=self.config.get("auto_context", True))
         auto_ctx_cb = ctk.CTkCheckBox(
             tab_general,
-            text="App-Aware Tone Detection (Auto-switches tone for Code, Word, Email & Chat)",
+            text="App-Aware Tone Detection (Auto-switches tone for Code, Search, Word, Email & Chat)",
             variable=self.auto_ctx_var,
             command=self._on_auto_ctx_changed,
             font=ctk.CTkFont(weight="bold")
         )
-        auto_ctx_cb.pack(anchor="w", padx=15, pady=(0, 12))
+        auto_ctx_cb.pack(anchor="w", padx=15, pady=(0, 8))
 
-        # Hotkey selector
-        ctk.CTkLabel(tab_general, text="Global Dictation Shortcut:", font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w", padx=15, pady=(5, 4))
+        # Sound Effects Toggle (v2.0)
+        self.sound_fx_var = ctk.BooleanVar(value=self.config.get("sound_effects", True))
+        sound_fx_cb = ctk.CTkCheckBox(
+            tab_general,
+            text="Sound Effects (Acoustic audio cues on recording start, stop & success)",
+            variable=self.sound_fx_var,
+            command=self._on_sound_fx_changed,
+            font=ctk.CTkFont(weight="bold")
+        )
+        sound_fx_cb.pack(anchor="w", padx=15, pady=(0, 12))
+
+        # Hotkey selector & Default Tone row
+        opts_row = ctk.CTkFrame(tab_general, fg_color="transparent")
+        opts_row.pack(fill="x", padx=15, pady=(0, 10))
+
+        hk_col = ctk.CTkFrame(opts_row, fg_color="transparent")
+        hk_col.pack(side="left", padx=(0, 20))
+        ctk.CTkLabel(hk_col, text="Global Dictation Shortcut:", font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w", pady=(0, 4))
         self.hk_var = ctk.StringVar(value=self.config.get("hotkey", "f8"))
         hk_menu = ctk.CTkOptionMenu(
-            tab_general,
+            hk_col,
             values=["f8", "f9", "<ctrl>+<shift>+<space>", "<caps_lock>", "<alt>+<space>"],
             variable=self.hk_var,
             command=self._on_hotkey_changed,
-            width=220
+            width=210
         )
-        hk_menu.pack(anchor="w", padx=15, pady=(0, 10))
+        hk_menu.pack(anchor="w")
+
+        tone_col = ctk.CTkFrame(opts_row, fg_color="transparent")
+        tone_col.pack(side="left")
+        ctk.CTkLabel(tone_col, text="Default Fallback Tone:", font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w", pady=(0, 4))
+        self.tone_var = ctk.StringVar(value=self.config.get("dictation_mode", "smart_flow"))
+        tone_menu = ctk.CTkOptionMenu(
+            tone_col,
+            values=["smart_flow", "search", "code", "formal_email", "formal_document", "translate_hindi", "translate_english", "bullet_notes", "verbatim"],
+            variable=self.tone_var,
+            command=self._on_tone_changed,
+            width=210
+        )
+        tone_menu.pack(anchor="w")
 
         # ----------------- Tab 2: Voice Snippets -----------------
         ctk.CTkLabel(tab_snippets, text="Voice Snippets & Text Expander", font=ctk.CTkFont(weight="bold", size=14)).pack(anchor="w", padx=15, pady=(10, 2))
@@ -128,7 +158,33 @@ class SettingsWindow:
         self.snippet_scroll.pack(fill="both", expand=True, padx=15, pady=5)
         self._refresh_snippets_list()
 
-        # ----------------- Tab 3: AI Engine -----------------
+        # ----------------- Tab 3: Personal Vocabulary (v2.0) -----------------
+        ctk.CTkLabel(tab_vocab, text="Personal Vocabulary & AI Self-Correction (v2.0)", font=ctk.CTkFont(weight="bold", size=14)).pack(anchor="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(tab_vocab, text="Teach Gemini custom names, local cities, and startup jargon. Gemini will prioritize this exact spelling.", text_color="gray", font=ctk.CTkFont(size=11)).pack(anchor="w", padx=15, pady=(0, 10))
+
+        self.self_corr_var = ctk.BooleanVar(value=self.config.get("self_correction", True))
+        self_corr_cb = ctk.CTkCheckBox(
+            tab_vocab,
+            text="Spoken Mid-Sentence Self-Correction (Auto-cleans 'meet at 4, actually make it 5 PM')",
+            variable=self.self_corr_var,
+            command=self._on_self_corr_changed,
+            font=ctk.CTkFont(weight="bold")
+        )
+        self_corr_cb.pack(anchor="w", padx=15, pady=(0, 12))
+
+        vocab_add_frame = ctk.CTkFrame(tab_vocab, fg_color="#1E293B", corner_radius=8)
+        vocab_add_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        self.vocab_entry = ctk.CTkEntry(vocab_add_frame, placeholder_text="Word / Name / Jargon (e.g. 'Aarav', 'Bengaluru', 'Kubernetes')", width=380)
+        self.vocab_entry.pack(side="left", padx=10, pady=8)
+
+        ctk.CTkButton(vocab_add_frame, text="➕ Add Term", width=100, command=self._add_vocab_term).pack(side="left", padx=10, pady=8)
+
+        self.vocab_scroll = ctk.CTkScrollableFrame(tab_vocab, height=240)
+        self.vocab_scroll.pack(fill="both", expand=True, padx=15, pady=5)
+        self._refresh_vocab_list()
+
+        # ----------------- Tab 4: AI Engine -----------------
         ctk.CTkLabel(tab_ai, text="Google AI Studio Gemini API Key:", font=ctk.CTkFont(weight="bold", size=14)).pack(anchor="w", padx=15, pady=(15, 5))
         
         key_input_row = ctk.CTkFrame(tab_ai, fg_color="transparent")
@@ -220,6 +276,70 @@ class SettingsWindow:
 
     def _on_auto_ctx_changed(self):
         self.config.set("auto_context", self.auto_ctx_var.get())
+
+    def _on_sound_fx_changed(self):
+        val = self.sound_fx_var.get()
+        self.config.set("sound_effects", val)
+        try:
+            from core.sound_effects import sound_effects
+            sound_effects.enabled = val
+        except Exception:
+            pass
+
+    def _on_tone_changed(self, new_tone):
+        self.config.set("dictation_mode", new_tone)
+
+    def _on_self_corr_changed(self):
+        self.config.set("self_correction", self.self_corr_var.get())
+
+    def _refresh_vocab_list(self):
+        for widget in self.vocab_scroll.winfo_children():
+            widget.destroy()
+
+        vocab = self.config.get_vocabulary() if hasattr(self.config, "get_vocabulary") else self.config.get("vocabulary", [])
+        if not vocab:
+            ctk.CTkLabel(self.vocab_scroll, text="No custom vocabulary added yet. Add terms above!").pack(pady=20)
+            return
+
+        for term in vocab:
+            card = ctk.CTkFrame(self.vocab_scroll, fg_color="#0F172A", corner_radius=6)
+            card.pack(fill="x", pady=3, padx=5)
+
+            ctk.CTkLabel(card, text=f"🏷️  {term}", font=ctk.CTkFont(weight="bold", size=12), text_color="#38BDF8").pack(side="left", padx=10, pady=6)
+
+            del_btn = ctk.CTkButton(
+                card,
+                text="✕",
+                width=28,
+                height=24,
+                fg_color="#7F1D1D",
+                hover_color="#EF4444",
+                command=lambda t=term: self._delete_vocab_term(t)
+            )
+            del_btn.pack(side="right", padx=10, pady=4)
+
+    def _add_vocab_term(self):
+        term = self.vocab_entry.get().strip()
+        if term:
+            if hasattr(self.config, "add_vocabulary_term"):
+                self.config.add_vocabulary_term(term)
+            else:
+                current = list(self.config.get("vocabulary", []))
+                if term not in current:
+                    current.append(term)
+                    self.config.set("vocabulary", current)
+            self.vocab_entry.delete(0, "end")
+            self._refresh_vocab_list()
+
+    def _delete_vocab_term(self, term):
+        if hasattr(self.config, "remove_vocabulary_term"):
+            self.config.remove_vocabulary_term(term)
+        else:
+            current = list(self.config.get("vocabulary", []))
+            if term in current:
+                current.remove(term)
+                self.config.set("vocabulary", current)
+        self._refresh_vocab_list()
 
     def stop_vu_monitor(self):
         """Cleanly yields VU meter updates during active dictation without disrupting the unified stream."""

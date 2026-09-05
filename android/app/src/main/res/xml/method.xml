@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<input-method xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="com.example.ownvoice.MainActivity"
+    android:supportsSwitchingToNextInputMethod="true">
+    <subtype
+        android:label="@string/subtype_voice"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true"
+        android:overridesImplicitlyEnabledSubtype="true" />
+    <subtype
+        android:label="@string/subtype_en_in"
+        android:imeSubtypeLocale="en_IN"
+        android:languageTag="en-IN"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true"
+        android:overridesImplicitlyEnabledSubtype="true" />
+    <subtype
+        android:label="@string/subtype_en_us"
+        android:imeSubtypeLocale="en_US"
+        android:languageTag="en-US"
+        android:imeSubtypeMode="keyboard"
+        android:isAsciiCapable="true"
+        android:overridesImplicitlyEnabledSubtype="true" />
+</input-method>

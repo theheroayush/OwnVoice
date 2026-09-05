@@ -16,6 +16,7 @@ build/
 dist/
 *.spec
 
-# System
+# System & Agents
 .DS_Store
 Thumbs.db
+.agents/

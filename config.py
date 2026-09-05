@@ -18,13 +18,20 @@ if ENV_FILE.exists():
 
 DEFAULT_CONFIG = {
     "google_api_key": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "AQ.Ab8RN6JVp6KVzuryq8BuUZLBYBuUJCNqwECacgdSMUegi5EblA",
-    "model": "gemini-3.5-flash-lite",
+    "model": "gemini-2.5-flash",
     "hotkey": "f8",
     "hotkey_mode": "toggle",
     "dictation_mode": "smart_flow",
     "auto_context": True,
+    "self_correction": True,
+    "vocabulary": [
+        "Aarav",
+        "Bengaluru",
+        "Kubernetes",
+        "B2B SaaS"
+    ],
     "custom_instructions": "",
-    "sound_effects": False,
+    "sound_effects": True,
     "input_device_index": 9,
     "sample_rate": 48000,
     "overlay_position": "bottom_center",
@@ -77,6 +84,28 @@ class ConfigManager:
         self.config[key] = value
         if save:
             self.save_config()
+
+    def get_vocabulary(self) -> list:
+        return self.config.get("vocabulary", ["Aarav", "Bengaluru", "Kubernetes", "B2B SaaS"])
+
+    def add_vocabulary_term(self, term: str) -> bool:
+        term = term.strip()
+        if not term:
+            return False
+        vocab = list(self.get_vocabulary())
+        if term not in vocab:
+            vocab.append(term)
+            self.set("vocabulary", vocab, save=True)
+            return True
+        return False
+
+    def remove_vocabulary_term(self, term: str) -> bool:
+        vocab = list(self.get_vocabulary())
+        if term in vocab:
+            vocab.remove(term)
+            self.set("vocabulary", vocab, save=True)
+            return True
+        return False
 
     def load_history(self) -> list:
         if not HISTORY_FILE.exists():
