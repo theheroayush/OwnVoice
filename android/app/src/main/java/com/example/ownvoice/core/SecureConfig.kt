@@ -27,6 +27,7 @@ class SecureConfig(context: Context) {
         private const val KEY_DESKTOP_BRIDGE_PIN = "desktop_bridge_pin"
         private const val KEY_GIST_TOKEN = "gist_token"
         private const val KEY_GIST_ID = "gist_id"
+        private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback_enabled"
     }
 
     val sharedPreferences: SharedPreferences get() = prefs
@@ -74,6 +75,10 @@ class SecureConfig(context: Context) {
     var isSoundEffectsEnabled: Boolean
         get() = prefs.getBoolean(KEY_SOUND_EFFECTS, false)
         set(value) = prefs.edit().putBoolean(KEY_SOUND_EFFECTS, value).apply()
+
+    var isHapticFeedbackEnabled: Boolean
+        get() = prefs.getBoolean(KEY_HAPTIC_FEEDBACK, true)
+        set(value) = prefs.edit().putBoolean(KEY_HAPTIC_FEEDBACK, value).apply()
 
     var isAutoContextToneEnabled: Boolean
         get() = prefs.getBoolean(KEY_AUTO_CONTEXT_TONE, true)

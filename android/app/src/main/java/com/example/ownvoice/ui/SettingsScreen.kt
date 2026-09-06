@@ -64,6 +64,7 @@ fun SettingsScreen(
     var autoContextToneEnabled by remember { mutableStateOf(app.secureConfig.isAutoContextToneEnabled) }
     var selfCorrectionEnabled by remember { mutableStateOf(app.secureConfig.isSelfCorrectionEnabled) }
     var soundEffectsEnabled by remember { mutableStateOf(app.secureConfig.isSoundEffectsEnabled) }
+    var hapticFeedbackEnabled by remember { mutableStateOf(app.secureConfig.isHapticFeedbackEnabled) }
     var selectedTone by remember { mutableStateOf(app.secureConfig.dictationMode) }
     var snippets by remember { mutableStateOf(app.secureConfig.getSnippets()) }
     var vocabulary by remember { mutableStateOf(app.secureConfig.getVocabulary()) }
@@ -663,6 +664,27 @@ fun SettingsScreen(
                                 onCheckedChange = { isChecked ->
                                     soundEffectsEnabled = isChecked
                                     app.secureConfig.isSoundEffectsEnabled = isChecked
+                                }
+                            )
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color(0xFF2C2C35))
+
+                        // Feature 4: Tactile Haptic Feedback
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Subtle Haptic Feedback", fontWeight = FontWeight.SemiBold, color = Color.White)
+                                Text("Crisp, gentle keypress ticks and hold-backspace pulses", fontSize = 12.sp, color = textMuted)
+                            }
+                            Switch(
+                                checked = hapticFeedbackEnabled,
+                                onCheckedChange = { isChecked ->
+                                    hapticFeedbackEnabled = isChecked
+                                    app.secureConfig.isHapticFeedbackEnabled = isChecked
                                 }
                             )
                         }

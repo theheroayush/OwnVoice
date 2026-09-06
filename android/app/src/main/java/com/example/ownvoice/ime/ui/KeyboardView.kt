@@ -5,7 +5,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -641,7 +646,14 @@ private fun GboardQwertyView(
                 modifier = Modifier
                     .weight(1.4f)
                     .height(rowKeyHeight)
-                    .clickable { isShifted = !isShifted }
+                    .pointerInput(isShifted) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            isShifted = !isShifted
+                            waitForUpOrCancellation()
+                        }
+                    }
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Text(
@@ -684,24 +696,13 @@ private fun GboardQwertyView(
                 }
             }
 
-            // Backspace Key (Cobalt Blue)
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = accentKeyBg,
-                modifier = Modifier
-                    .weight(1.4f)
-                    .height(rowKeyHeight)
-                    .clickable { onBackspaceClick() }
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Backspace,
-                        contentDescription = "Backspace",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
+            // Backspace Key (Cobalt Blue with Rapid Repeating Acceleration on Hold)
+            GboardBackspaceKey(
+                accentKeyBg = accentKeyBg,
+                height = rowKeyHeight,
+                modifier = Modifier.weight(1.4f),
+                onBackspaceClick = onBackspaceClick
+            )
         }
 
         // ROW 4: ?123, Comma, Emoji/Globe, Wide Space Bar, Period, Enter/Action
@@ -717,7 +718,14 @@ private fun GboardQwertyView(
                 modifier = Modifier
                     .weight(1.35f)
                     .height(rowKeyHeight)
-                    .clickable { isSymbolsMode = !isSymbolsMode }
+                    .pointerInput(isSymbolsMode) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            isSymbolsMode = !isSymbolsMode
+                            waitForUpOrCancellation()
+                        }
+                    }
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Text(
@@ -730,13 +738,23 @@ private fun GboardQwertyView(
             }
 
             // Comma Key (Cobalt Blue)
+            var isCommaPressed by remember { mutableStateOf(false) }
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = accentKeyBg,
+                color = if (isCommaPressed) accentKeyBg.copy(alpha = 0.72f) else accentKeyBg,
                 modifier = Modifier
                     .weight(0.9f)
                     .height(rowKeyHeight)
-                    .clickable { onTypeChar(",") }
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            isCommaPressed = true
+                            onTypeChar(",")
+                            waitForUpOrCancellation()
+                            isCommaPressed = false
+                        }
+                    }
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Text(text = ",", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -757,14 +775,24 @@ private fun GboardQwertyView(
                 }
             }
 
-            // Wide Gboard Space Bar with "OwnVoice" Watermark
+            // Wide Gboard Space Bar with Instant Press & "OwnVoice" Watermark
+            var isSpacePressed by remember { mutableStateOf(false) }
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = keyBg,
+                color = if (isSpacePressed) keyBg.copy(alpha = 0.72f) else keyBg,
                 modifier = Modifier
                     .weight(4.2f)
                     .height(rowKeyHeight)
-                    .clickable { onSpaceClick() }
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            isSpacePressed = true
+                            onSpaceClick()
+                            waitForUpOrCancellation()
+                            isSpacePressed = false
+                        }
+                    }
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Text(
@@ -777,13 +805,23 @@ private fun GboardQwertyView(
             }
 
             // Period Key (Cobalt Blue)
+            var isPeriodPressed by remember { mutableStateOf(false) }
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = accentKeyBg,
+                color = if (isPeriodPressed) accentKeyBg.copy(alpha = 0.72f) else accentKeyBg,
                 modifier = Modifier
                     .weight(0.9f)
                     .height(rowKeyHeight)
-                    .clickable { onTypeChar(".") }
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            isPeriodPressed = true
+                            onTypeChar(".")
+                            waitForUpOrCancellation()
+                            isPeriodPressed = false
+                        }
+                    }
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Text(text = ".", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -791,13 +829,23 @@ private fun GboardQwertyView(
             }
 
             // Action / Enter / Search Key (Vibrant Cobalt Blue)
+            var isEnterPressed by remember { mutableStateOf(false) }
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = actionEnterBg,
+                color = if (isEnterPressed) actionEnterBg.copy(alpha = 0.75f) else actionEnterBg,
                 modifier = Modifier
                     .weight(1.35f)
                     .height(rowKeyHeight)
-                    .clickable { onEnterClick() }
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            isEnterPressed = true
+                            onEnterClick()
+                            waitForUpOrCancellation()
+                            isEnterPressed = false
+                        }
+                    }
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                     Icon(
@@ -813,7 +861,7 @@ private fun GboardQwertyView(
 }
 
 // -------------------------------------------------------------------------------------------------
-// GBOARD KEY COMPOSABLE (With Top-Right Number Subscript)
+// GBOARD KEY COMPOSABLE (Instant Touch-Down Latency with Top-Right Number Subscript)
 // -------------------------------------------------------------------------------------------------
 @Composable
 private fun GboardKey(
@@ -826,12 +874,24 @@ private fun GboardKey(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    var isPressed by remember { mutableStateOf(false) }
+    val effectiveBg = if (isPressed) keyBg.copy(alpha = 0.72f) else keyBg
+
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = keyBg,
+        color = effectiveBg,
         modifier = modifier
             .height(height)
-            .clickable { onClick() }
+            .pointerInput(char, onClick) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    isPressed = true
+                    onClick()
+                    waitForUpOrCancellation()
+                    isPressed = false
+                }
+            }
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -857,6 +917,70 @@ private fun GboardKey(
                         .padding(top = 2.dp, end = 4.dp)
                 )
             }
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// GBOARD CONTINUOUS ACCELERATING BACKSPACE KEY COMPOSABLE
+// -------------------------------------------------------------------------------------------------
+@Composable
+private fun GboardBackspaceKey(
+    accentKeyBg: Color,
+    height: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+    onBackspaceClick: () -> Unit
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val effectiveBg = if (isPressed) accentKeyBg.copy(alpha = 0.72f) else accentKeyBg
+
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = effectiveBg,
+        modifier = modifier
+            .height(height)
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    isPressed = true
+
+                    // 1. Immediate deletion on initial touch down!
+                    onBackspaceClick()
+
+                    // 2. Initial hold threshold delay: 350ms
+                    val upOrCancel = withTimeoutOrNull(350L) {
+                        waitForUpOrCancellation()
+                    }
+
+                    // 3. User is holding: continuous rapid backspace loop
+                    if (upOrCancel == null) {
+                        val holdStart = System.currentTimeMillis()
+                        while (true) {
+                            val elapsed = System.currentTimeMillis() - holdStart
+                            // Accelerate: after 1200ms of continuous hold, speed up from 45ms to 25ms per deletion
+                            val interval = if (elapsed > 1200L) 25L else 45L
+
+                            val released = withTimeoutOrNull(interval) {
+                                waitForUpOrCancellation()
+                            }
+                            if (released != null) {
+                                break // User lifted finger or gesture cancelled
+                            }
+                            onBackspaceClick()
+                        }
+                    }
+                    isPressed = false
+                }
+            }
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Backspace,
+                contentDescription = "Backspace",
+                tint = Color.White,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

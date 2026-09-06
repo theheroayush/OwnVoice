@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
 import android.os.Build
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.KeyEvent
@@ -69,6 +70,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     private lateinit var snippetEngine: SnippetEngine
     private lateinit var bridgeClient: BridgeClient
     private var vibrator: Vibrator? = null
+    private var lastBackspaceHapticTime = 0L
 
     private var keyboardState by mutableStateOf(KeyboardState.IDLE)
     private var statusMessage by mutableStateOf("")
@@ -286,9 +288,27 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         },
                         onBackspaceClick = {
                             try {
-                                sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                                val ic = currentInputConnection
+                                if (ic != null) {
+                                    val selected = ic.getSelectedText(0)
+                                    if (!selected.isNullOrEmpty()) {
+                                        ic.commitText("", 1)
+                                    } else {
+                                        val deleted = ic.deleteSurroundingText(1, 0)
+                                        if (!deleted) {
+                                            sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                                        }
+                                    }
+                                } else {
+                                    sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                                }
                                 if (lastInjectedLength > 0) lastInjectedLength--
-                                performHaptic()
+
+                                val now = SystemClock.uptimeMillis()
+                                if (now - lastBackspaceHapticTime >= 70L) {
+                                    performHaptic(light = true)
+                                    lastBackspaceHapticTime = now
+                                }
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onBackspaceClick error", e)
                             }
@@ -627,13 +647,21 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         }
     }
 
-    private fun performHaptic() {
+    private fun performHaptic(light: Boolean = true) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator?.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
+            val app = application as? OwnVoiceApplication
+            if (app?.secureConfig?.isHapticFeedbackEnabled == false) return
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val effectId = if (light) VibrationEffect.EFFECT_TICK else VibrationEffect.EFFECT_CLICK
+                vibrator?.vibrate(VibrationEffect.createPredefined(effectId))
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val duration = if (light) 6L else 12L
+                val amplitude = if (light) 20 else 50
+                vibrator?.vibrate(VibrationEffect.createOneShot(duration, amplitude))
             } else {
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(30)
+                vibrator?.vibrate(if (light) 6L else 12L)
             }
         } catch (ignored: Exception) {}
     }
