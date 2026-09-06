@@ -59,6 +59,12 @@ class SettingsWindow:
 
         self._setup_phone_link_tab(tab_link)
 
+        if initial_tab:
+            try:
+                self.window.after(50, lambda: self.tabview.set(initial_tab))
+            except Exception:
+                pass
+
         # ----------------- Tab 1: General -----------------
         ctk.CTkLabel(tab_general, text="Microphone Input Device (Safe Verified Devices):", font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w", padx=15, pady=(10, 4))
         

@@ -320,7 +320,7 @@ class OwnVoiceApp:
             pass
         os._exit(0)
 
-    def run(self):
+    def run(self, open_link: bool = False):
         try:
             ensure_default_desktop()
             log_event("Starting HotkeyManager...")
@@ -329,6 +329,12 @@ class OwnVoiceApp:
             self.tray.start()
             log_event("Starting Overlay...")
             self.overlay.start_overlay()
+
+            if open_link or "--link" in sys.argv:
+                log_event("Auto-opening Phone Link pairing window on startup...")
+                if self.overlay.root:
+                    self.overlay.root.after(350, self.open_phone_link)
+
             log_event("Entering mainloop...")
             self.overlay.root.mainloop()
         except Exception as e:
@@ -377,9 +383,6 @@ if __name__ == "__main__":
         try:
             ensure_default_desktop()
             app = OwnVoiceApp()
-            if "--link" in sys.argv:
-                if app.overlay and app.overlay.root:
-                    app.overlay.root.after(300, app.open_phone_link)
             app.run()
         except Exception as e:
             import traceback
