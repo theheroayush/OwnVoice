@@ -142,6 +142,42 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 android.util.Log.e("OwnVoiceIME", "toggleRecording error", e)
                             }
                         },
+                        onToneCycle = {
+                            val toneList = listOf("smart_flow", "search", "translate_hindi", "chat", "formal_email", "code")
+                            val currentIndex = toneList.indexOf(currentEffectiveTone)
+                            currentEffectiveTone = if (currentIndex == -1 || currentIndex == toneList.lastIndex) {
+                                toneList.first()
+                            } else {
+                                toneList[currentIndex + 1]
+                            }
+                            performHaptic()
+                        },
+                        onToneSelect = { selectedTone ->
+                            currentEffectiveTone = selectedTone
+                            performHaptic()
+                        },
+                        onClearClick = {
+                            try {
+                                val ic = currentInputConnection
+                                val selected = ic?.getSelectedText(0)
+                                if (!selected.isNullOrEmpty()) {
+                                    ic.commitText("", 1)
+                                } else {
+                                    ic?.deleteSurroundingText(2000, 500)
+                                }
+                                performHaptic()
+                            } catch (e: Exception) {
+                                android.util.Log.e("OwnVoiceIME", "onClearClick error", e)
+                            }
+                        },
+                        onNewLineClick = {
+                            try {
+                                currentInputConnection?.commitText("\n", 1)
+                                performHaptic()
+                            } catch (e: Exception) {
+                                android.util.Log.e("OwnVoiceIME", "onNewLineClick error", e)
+                            }
+                        },
                         onSnippetClick = { trigger ->
                             try {
                                 val expansion = snippetEngine.expand(trigger)
