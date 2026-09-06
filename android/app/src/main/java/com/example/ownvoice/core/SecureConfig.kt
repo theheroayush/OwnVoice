@@ -21,7 +21,24 @@ class SecureConfig(context: Context) {
         private const val KEY_AUTO_CONTEXT_TONE = "auto_context_tone"
         private const val KEY_SELF_CORRECTION = "self_correction_enabled"
         private const val KEY_VOCABULARY_JSON = "vocabulary_json"
+        private const val KEY_DESKTOP_BRIDGE_IP = "desktop_bridge_ip"
+        private const val KEY_GIST_TOKEN = "gist_token"
+        private const val KEY_GIST_ID = "gist_id"
     }
+
+    val sharedPreferences: SharedPreferences get() = prefs
+
+    var desktopBridgeIp: String
+        get() = prefs.getString(KEY_DESKTOP_BRIDGE_IP, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_IP, value.trim()).apply()
+
+    var gistToken: String
+        get() = prefs.getString(KEY_GIST_TOKEN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GIST_TOKEN, value.trim()).apply()
+
+    var gistId: String
+        get() = prefs.getString(KEY_GIST_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GIST_ID, value.trim()).apply()
 
     var apiKey: String
         get() = prefs.getString(KEY_API_KEY, "")?.trim() ?: ""

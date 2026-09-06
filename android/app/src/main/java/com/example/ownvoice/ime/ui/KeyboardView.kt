@@ -61,6 +61,10 @@ fun KeyboardView(
     onToneSelect: (String) -> Unit = {},
     onClearClick: () -> Unit = {},
     onNewLineClick: () -> Unit = {},
+    isBridgeActive: Boolean = false,
+    isAutoVadActive: Boolean = false,
+    onToggleBridge: () -> Unit = {},
+    onToggleAutoVad: () -> Unit = {},
     onSnippetClick: (String) -> Unit,
     onBackspaceClick: () -> Unit,
     onEnterClick: () -> Unit,
@@ -194,6 +198,46 @@ fun KeyboardView(
                     Text(
                         text = "✕ Clear",
                         color = textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Quick Action: 💻 PC Bridge
+            item {
+                Surface(
+                    color = if (isBridgeActive) Color(0xFF00C7BE).copy(alpha = 0.25f) else cardBackground,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, if (isBridgeActive) Color(0xFF00C7BE) else chipBorder),
+                    modifier = Modifier.clickable { onToggleBridge() }
+                ) {
+                    Text(
+                        text = if (isBridgeActive) "💻 PC: ON" else "💻 PC Bridge",
+                        color = if (isBridgeActive) Color(0xFF00C7BE) else textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Quick Action: 🎙️ Auto VAD
+            item {
+                Surface(
+                    color = if (isAutoVadActive) Color(0xFF34C759).copy(alpha = 0.25f) else cardBackground,
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, if (isAutoVadActive) Color(0xFF34C759) else chipBorder),
+                    modifier = Modifier.clickable { onToggleAutoVad() }
+                ) {
+                    Text(
+                        text = if (isAutoVadActive) "🎙️ Auto: ON" else "🎙️ Auto VAD",
+                        color = if (isAutoVadActive) Color(0xFF34C759) else textSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,

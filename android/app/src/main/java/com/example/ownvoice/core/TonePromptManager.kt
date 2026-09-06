@@ -100,8 +100,10 @@ object TonePromptManager {
 
         if (enableSelfCorrection) {
             builder.append("\n\nSELF-CORRECTION & SPOKEN COMMANDS:")
-            builder.append("\n- If the speaker corrects themselves mid-sentence (e.g. 'meet at 4, actually make it 5 PM', 'send to Bob, I mean Alice'), intelligently output ONLY the final corrected thought.")
-            builder.append("\n- If the speaker explicitly says 'new line' or 'next line', insert a newline. If they say 'new paragraph', insert two newlines.")
+            builder.append("\n- ELIMINATE MISTAKES: If the speaker stumbles, corrects numbers, dates, or names, or changes their mind mid-sentence (e.g. 'call at two, no wait, three PM', 'twenty, sorry thirty-five', 'send to Bob, I mean Alice'), output ONLY the final corrected thought. Never include the mistake or false start.")
+            builder.append("\n- ERASURE COMMANDS: If the speaker says ONLY 'scratch that', 'delete that', 'undo that', 'clear that', or 'erase that', output exactly '[COMMAND:DELETE_LAST]'.")
+            builder.append("\n- CLEAR ALL COMMANDS: If the speaker says ONLY 'clear all', 'delete line', or 'clear text', output exactly '[COMMAND:CLEAR_ALL]'.")
+            builder.append("\n- FORMATTING COMMANDS: If the speaker says 'new line' or 'next line', insert a newline. If they say 'new paragraph', insert two newlines.")
         }
 
         if (vocabulary.isNotEmpty()) {

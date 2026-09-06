@@ -24,6 +24,7 @@ from core.snippet_engine import SnippetEngine
 from ui.floating_widget import FloatingWidget
 from ui.settings_window import SettingsWindow
 from ui.tray_icon import TrayIcon
+from core.bridge_server import BridgeServer, get_local_ip
 
 LOG_FILE = APP_BASE_DIR / "app.log"
 
@@ -88,6 +89,8 @@ class OwnVoiceApp:
         sound_effects.enabled = self.config.get("sound_effects", True)
         self.active_context_mode = "smart_flow"
         self.active_context_label = ""
+        self.bridge_server = BridgeServer(port=8765, on_inject=self.injector.inject_text)
+        self.bridge_server.start()
 
         self.overlay = FloatingWidget(
             get_volume_fn=self.audio_recorder.get_current_volume,
@@ -190,6 +193,28 @@ class OwnVoiceApp:
                         self.overlay.root.after(0, lambda: self.overlay.show_error("No speech"))
                     return
 
+                raw_trimmed = text.strip()
+                norm_cmd = raw_trimmed.lower().rstrip(".!")
+
+                # Intercept Hands-Free Vocal Erase Commands
+                if raw_trimmed == "[COMMAND:DELETE_LAST]" or norm_cmd in ["scratch that", "delete that", "undo that", "erase that", "cancel that"]:
+                    self.injector.erase_last()
+                    log_event("Vocal edit executed: Erased last injection")
+                    if self.config.get("sound_effects", False):
+                        sound_effects.play_success()
+                    if self.overlay.root:
+                        self.overlay.root.after(0, lambda: self.overlay.show_success("Erased last entry"))
+                    return
+
+                if raw_trimmed == "[COMMAND:CLEAR_ALL]" or norm_cmd in ["clear all", "delete line", "clear text"]:
+                    self.injector.erase_all()
+                    log_event("Vocal edit executed: Cleared text")
+                    if self.config.get("sound_effects", False):
+                        sound_effects.play_success()
+                    if self.overlay.root:
+                        self.overlay.root.after(0, lambda: self.overlay.show_success("Cleared line"))
+                    return
+
                 # Voice Snippets Expansion
                 expanded_text = self.snippet_engine.expand(text)
                 if expanded_text != text:
@@ -254,6 +279,11 @@ class OwnVoiceApp:
 
     def exit_app(self):
         log_event("Exiting OwnVoice...")
+        try:
+            if hasattr(self, "bridge_server") and self.bridge_server:
+                self.bridge_server.stop()
+        except Exception:
+            pass
         try:
             self.hotkey_manager.stop()
         except Exception:

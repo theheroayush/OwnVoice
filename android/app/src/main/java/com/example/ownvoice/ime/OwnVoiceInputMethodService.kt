@@ -32,6 +32,7 @@ import com.example.ownvoice.core.SnippetEngine
 import com.example.ownvoice.core.TonePromptManager
 import com.example.ownvoice.ime.ui.KeyboardState
 import com.example.ownvoice.ime.ui.KeyboardView
+import com.example.ownvoice.network.BridgeClient
 import com.example.ownvoice.network.GeminiRestClient
 import kotlinx.coroutines.*
 
@@ -66,12 +67,18 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     private lateinit var audioRecorder: AudioRecordStreamer
     private lateinit var geminiClient: GeminiRestClient
     private lateinit var snippetEngine: SnippetEngine
+    private val bridgeClient = BridgeClient()
     private var vibrator: Vibrator? = null
 
     private var keyboardState by mutableStateOf(KeyboardState.IDLE)
     private var statusMessage by mutableStateOf("")
     private var currentAmplitude by mutableStateOf(0.0f)
     private var currentEffectiveTone by mutableStateOf("smart_flow")
+    private var lastInjectedLength = 0
+    private var isBridgeActive by mutableStateOf(false)
+    private var isAutoVadActive by mutableStateOf(false)
+    private var lastSpeechTime = 0L
+    private var speechDetectedInSession = false
 
     override fun onCreate() {
         super.onCreate()
@@ -85,10 +92,20 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         snippetEngine = SnippetEngine(app.secureConfig)
         vibrator = getSystemService(Vibrator::class.java)
 
-        // Observe amplitude flow for live waveform
+        // Observe amplitude flow for live waveform & Auto VAD
         serviceScope.launch {
             audioRecorder.amplitudeFlow.collect { amp ->
                 currentAmplitude = amp
+                if (isAutoVadActive && keyboardState == KeyboardState.RECORDING) {
+                    val now = System.currentTimeMillis()
+                    if (amp > 0.08f) {
+                        speechDetectedInSession = true
+                        lastSpeechTime = now
+                    } else if (speechDetectedInSession && (now - lastSpeechTime > 1200)) {
+                        speechDetectedInSession = false
+                        stopRecordingAndTranscribe()
+                    }
+                }
             }
         }
     }
@@ -165,6 +182,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 } else {
                                     ic?.deleteSurroundingText(2000, 500)
                                 }
+                                lastInjectedLength = 0
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onClearClick error", e)
@@ -178,6 +196,23 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 android.util.Log.e("OwnVoiceIME", "onNewLineClick error", e)
                             }
                         },
+                        isBridgeActive = isBridgeActive,
+                        isAutoVadActive = isAutoVadActive,
+                        onToggleBridge = {
+                            val app = application as OwnVoiceApplication
+                            if (app.secureConfig.desktopBridgeIp.isBlank()) {
+                                statusMessage = "Set PC IP in OwnVoice Settings"
+                            } else {
+                                isBridgeActive = !isBridgeActive
+                                performHaptic()
+                                statusMessage = if (isBridgeActive) "PC Bridge ON: ${app.secureConfig.desktopBridgeIp}" else "PC Bridge OFF"
+                            }
+                        },
+                        onToggleAutoVad = {
+                            isAutoVadActive = !isAutoVadActive
+                            performHaptic()
+                            statusMessage = if (isAutoVadActive) "Auto VAD Mode ON" else "Auto VAD Mode OFF"
+                        },
                         onSnippetClick = { trigger ->
                             try {
                                 val expansion = snippetEngine.expand(trigger)
@@ -190,6 +225,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         onBackspaceClick = {
                             try {
                                 sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                                if (lastInjectedLength > 0) lastInjectedLength--
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onBackspaceClick error", e)
@@ -263,6 +299,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
 
         keyboardState = KeyboardState.IDLE
         statusMessage = ""
+        lastInjectedLength = 0
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -334,9 +371,48 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
 
             try {
                 val (text, latency) = geminiClient.transcribeAudio(wavBytes, mode = currentEffectiveTone)
-                if (text.isNotBlank()) {
+                val rawTrimmed = text.trim()
+                val normalizedCmd = rawTrimmed.lowercase().removeSuffix(".").removeSuffix("!")
+
+                if (rawTrimmed == "[COMMAND:DELETE_LAST]" || normalizedCmd in listOf("scratch that", "delete that", "undo that", "erase that", "cancel that")) {
+                    if (lastInjectedLength > 0) {
+                        currentInputConnection?.deleteSurroundingText(lastInjectedLength, 0)
+                        lastInjectedLength = 0
+                    } else {
+                        currentInputConnection?.deleteSurroundingText(1, 0)
+                    }
+                    performHaptic()
+                    keyboardState = KeyboardState.IDLE
+                    statusMessage = "Erased last entry"
+                    delay(1200)
+                    if (keyboardState == KeyboardState.IDLE && statusMessage == "Erased last entry") {
+                        statusMessage = ""
+                    }
+                } else if (rawTrimmed == "[COMMAND:CLEAR_ALL]" || normalizedCmd in listOf("clear all", "delete line", "clear line", "clear text")) {
+                    currentInputConnection?.deleteSurroundingText(2000, 500)
+                    lastInjectedLength = 0
+                    performHaptic()
+                    keyboardState = KeyboardState.IDLE
+                    statusMessage = "Cleared text"
+                    delay(1200)
+                    if (keyboardState == KeyboardState.IDLE && statusMessage == "Cleared text") {
+                        statusMessage = ""
+                    }
+                } else if (text.isNotBlank()) {
                     val expanded = snippetEngine.expand(text)
                     currentInputConnection?.commitText(expanded, 1)
+                    lastInjectedLength = expanded.length
+
+                    if (isBridgeActive) {
+                        val app = application as OwnVoiceApplication
+                        val pcIp = app.secureConfig.desktopBridgeIp
+                        if (pcIp.isNotBlank()) {
+                            serviceScope.launch {
+                                bridgeClient.sendToDesktop(pcIp, expanded)
+                            }
+                        }
+                    }
+
                     performHaptic()
                     keyboardState = KeyboardState.IDLE
                     statusMessage = ""

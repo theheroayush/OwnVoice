@@ -37,6 +37,7 @@ import com.example.ownvoice.OwnVoiceApplication
 import com.example.ownvoice.R
 import com.example.ownvoice.overlay.FloatingBubbleService
 import com.example.ownvoice.overlay.OverlayAccessibilityService
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -65,6 +66,12 @@ fun SettingsScreen(
     var selectedTone by remember { mutableStateOf(app.secureConfig.dictationMode) }
     var snippets by remember { mutableStateOf(app.secureConfig.getSnippets()) }
     var vocabulary by remember { mutableStateOf(app.secureConfig.getVocabulary()) }
+    var bridgeIp by remember { mutableStateOf(app.secureConfig.desktopBridgeIp) }
+    var gistToken by remember { mutableStateOf(app.secureConfig.gistToken) }
+    var gistId by remember { mutableStateOf(app.secureConfig.gistId) }
+    var syncStatusMessage by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val gistManager = remember { com.example.ownvoice.network.GistSyncManager() }
 
     var showRestrictedSettingsDialog by remember { mutableStateOf(false) }
     var showAddSnippetDialog by remember { mutableStateOf(false) }
@@ -493,6 +500,153 @@ fun SettingsScreen(
                                         Icon(imageVector = Icons.Default.Close, contentDescription = "Delete", tint = accentRed, modifier = Modifier.size(18.dp))
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Section 5: Universal PC Dictation Bridge
+            item {
+                Text("UNIVERSAL PC DICTATION BRIDGE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textMuted)
+            }
+
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = cardBg,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("💻 Stream Speech to Windows PC", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            "Dictate using your phone and have text automatically appear at your cursor on your PC over local Wi-Fi.",
+                            fontSize = 12.sp,
+                            color = textMuted,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = bridgeIp,
+                            onValueChange = {
+                                bridgeIp = it
+                                app.secureConfig.desktopBridgeIp = it
+                            },
+                            label = { Text("PC Wi-Fi IP (e.g. 192.168.1.15)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+
+            // Section 6: GitHub Gist Cloud Sync
+            item {
+                Text("GITHUB GIST CLOUD SYNC", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textMuted)
+            }
+
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = cardBg,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("☁️ Sync Vocabulary & Snippets", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            "Keep your custom vocabulary, names, and snippets synchronized between your Windows PC and your phone.",
+                            fontSize = 12.sp,
+                            color = textMuted,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = gistToken,
+                            onValueChange = {
+                                gistToken = it
+                                app.secureConfig.gistToken = it
+                            },
+                            label = { Text("GitHub Personal Access Token (PAT)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = gistId,
+                            onValueChange = {
+                                gistId = it
+                                app.secureConfig.gistId = it
+                            },
+                            label = { Text("Gist ID (leave blank to create new)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (syncStatusMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(syncStatusMessage, fontSize = 12.sp, color = accentBlue)
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    scope.launch {
+                                        syncStatusMessage = "Syncing to GitHub Gist..."
+                                        val payload = org.json.JSONObject().apply {
+                                            put("vocabulary", org.json.JSONArray(app.secureConfig.getVocabulary()))
+                                            val snipJson = org.json.JSONObject()
+                                            app.secureConfig.getSnippets().forEach { (k, v) -> snipJson.put(k, v) }
+                                            put("snippets", snipJson)
+                                            put("dictation_mode", app.secureConfig.dictationMode)
+                                        }
+                                        val res = gistManager.syncToGist(gistToken, payload, gistId.ifBlank { null })
+                                        syncStatusMessage = res.message
+                                        if (res.success && res.gistId != null) {
+                                            gistId = res.gistId
+                                            app.secureConfig.gistId = res.gistId
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = accentBlue),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("⬆️ Push")
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch {
+                                        syncStatusMessage = "Pulling from GitHub Gist..."
+                                        val res = gistManager.syncFromGist(gistToken, gistId)
+                                        syncStatusMessage = res.message
+                                        if (res.success && res.payload != null) {
+                                            val p = res.payload
+                                            val vocabArr = p.optJSONArray("vocabulary")
+                                            if (vocabArr != null) {
+                                                for (i in 0 until vocabArr.length()) {
+                                                    val term = vocabArr.getString(i)
+                                                    app.secureConfig.addVocabularyTerm(term)
+                                                }
+                                                vocabulary = app.secureConfig.getVocabulary()
+                                            }
+                                            val snipObj = p.optJSONObject("snippets")
+                                            if (snipObj != null) {
+                                                val existing = app.secureConfig.getSnippets().toMutableMap()
+                                                val keys = snipObj.keys()
+                                                while (keys.hasNext()) {
+                                                    val k = keys.next()
+                                                    existing[k] = snipObj.getString(k)
+                                                }
+                                                app.secureConfig.saveSnippets(existing)
+                                                snippets = existing
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("⬇️ Pull", color = Color.White)
                             }
                         }
                     }

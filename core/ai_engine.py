@@ -5,6 +5,7 @@ from typing import Tuple
 
 import requests
 from requests.adapters import HTTPAdapter
+from core.offline_engine import OfflineWhisperEngine
 
 DICTATION_PROMPTS = {
     "smart_flow": (
@@ -90,6 +91,7 @@ class AIEngine:
         adapter = HTTPAdapter(pool_connections=5, pool_maxsize=10)
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
+        self.offline_engine = OfflineWhisperEngine()
 
     @staticmethod
     def _clean_transcript(raw_text: str) -> str:
@@ -128,14 +130,14 @@ class AIEngine:
 
         system_instruction = DICTATION_PROMPTS.get(mode, DICTATION_PROMPTS["smart_flow"])
 
-        # Mid-Sentence Self-Correction & Spoken Commands (Version 2.0)
+        # Mid-Sentence Self-Correction & Spoken Commands (Version 2.0+)
         if self.config.get("self_correction", True):
             system_instruction += (
-                "\n\nSELF-CORRECTION & SPOKEN COMMANDS:\n"
-                "- If the speaker corrects themselves mid-sentence (e.g. 'meet at 4, actually make it 5 PM', "
-                "'send to Bob, I mean Alice'), intelligently output ONLY the final corrected thought.\n"
-                "- If the speaker explicitly says 'new line' or 'next line', insert a newline (\\n). "
-                "If they say 'new paragraph', insert two newlines (\\n\\n)."
+                "\n\nCRITICAL MISTAKE CORRECTION & SPOKEN COMMANDS:\n"
+                "- ELIMINATE MISTAKES: If the speaker stumbles, corrects numbers, dates, or names, or changes their mind mid-sentence (e.g. 'call at two, no wait, three PM', 'twenty, sorry thirty-five', 'send to Bob, I mean Alice'), output ONLY the final corrected thought. Never include the mistake or false start.\n"
+                "- ERASURE COMMANDS: If the speaker says ONLY 'scratch that', 'delete that', 'undo that', 'clear that', or 'erase that', output exactly '[COMMAND:DELETE_LAST]'.\n"
+                "- CLEAR ALL COMMANDS: If the speaker says ONLY 'clear all', 'delete line', or 'clear text', output exactly '[COMMAND:CLEAR_ALL]'.\n"
+                "- FORMATTING COMMANDS: If the speaker says 'new line' or 'next line', insert a newline (\\n). If they say 'new paragraph', insert two newlines (\\n\\n)."
             )
 
         # Personal Vocabulary Bank (Version 2.0)
@@ -206,6 +208,14 @@ class AIEngine:
                 raise
             except Exception as e:
                 last_error = str(e)
+
+        # Automatic Zero-Latency Offline Fallback
+        try:
+            offline_text, offline_latency = self.offline_engine.transcribe(audio_wav_bytes)
+            if offline_text:
+                return offline_text, offline_latency
+        except Exception:
+            pass
 
         raise RuntimeError(last_error or "Unable to transcribe audio with Gemini models.")
 

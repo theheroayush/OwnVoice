@@ -111,6 +111,7 @@ class CursorInjector:
         self.last_target_hwnd: Optional[int] = None
         self.overlay_hwnd: Optional[int] = None
         self._clip_fallback_text = ""
+        self.last_injected_length = 0
 
     def set_overlay_hwnd(self, hwnd: int):
         self.overlay_hwnd = hwnd
@@ -301,6 +302,32 @@ class CursorInjector:
                 return False
         return True
 
+    def erase_last(self, count: Optional[int] = None) -> bool:
+        """Erase last injected chunk or specific character count hands-free via backspace."""
+        self.refocus_target()
+        time.sleep(0.05)
+        n = count if count is not None else getattr(self, "last_injected_length", 0)
+        if n <= 0:
+            n = 1
+        n = min(n, 500)
+        from pynput.keyboard import Key
+        for _ in range(n):
+            kb.tap(Key.backspace)
+        self.last_injected_length = 0
+        return True
+
+    def erase_all(self) -> bool:
+        """Clear the current line/field hands-free."""
+        self.refocus_target()
+        time.sleep(0.05)
+        from pynput.keyboard import Key
+        with kb.pressed(Key.shift):
+            kb.tap(Key.home)
+        time.sleep(0.02)
+        kb.tap(Key.backspace)
+        self.last_injected_length = 0
+        return True
+
     def inject_text(self, text: str) -> bool:
         if not text:
             return False
@@ -308,6 +335,7 @@ class CursorInjector:
         self.refocus_target()
         time.sleep(0.05)
 
+        self.last_injected_length = len(text)
         orig_clip = self.get_clipboard_text()
         clip_ok = self.set_clipboard_text(text)
 
