@@ -21,13 +21,15 @@ data class DiscoveredDesktop(
     val ip: String,
     val port: Int,
     val pin: String,
-    val token: String
+    val token: String,
+    val apiKey: String = ""
 )
 
 data class PairResult(
     val success: Boolean,
     val deviceName: String = "",
     val token: String = "",
+    val apiKey: String = "",
     val error: String = ""
 )
 
@@ -129,8 +131,12 @@ class BridgeClient(
                             ip = if (json.optString("ip").isNotBlank()) json.optString("ip") else senderIp,
                             port = json.optInt("port", 8765),
                             pin = json.optString("pin", ""),
-                            token = json.optString("token", "")
+                            token = json.optString("token", ""),
+                            apiKey = json.optString("api_key", "")
                         )
+                        if (desktop.apiKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                            config?.apiKey = desktop.apiKey
+                        }
                         if (found.none { it.ip == desktop.ip }) {
                             found.add(desktop)
                         }
@@ -176,7 +182,11 @@ class BridgeClient(
             if (resp.isSuccessful && respJson.optBoolean("success")) {
                 val token = respJson.optString("token", "")
                 val name = respJson.optString("device_name", "Windows PC")
-                PairResult(true, deviceName = name, token = token)
+                val apiKey = respJson.optString("api_key", "")
+                if (apiKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                    config?.apiKey = apiKey
+                }
+                PairResult(true, deviceName = name, token = token, apiKey = apiKey)
             } else {
                 PairResult(false, error = respJson.optString("error", "Pairing failed (HTTP ${resp.code})"))
             }
@@ -195,7 +205,21 @@ class BridgeClient(
         val request = Request.Builder().url(url).get().build()
         try {
             val resp = client.newCall(request).execute()
-            resp.isSuccessful
+            if (resp.isSuccessful) {
+                val respStr = resp.body?.string() ?: "{}"
+                val json = JSONObject(respStr)
+                val returnedKey = json.optString("api_key", "")
+                if (returnedKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                    config?.apiKey = returnedKey
+                }
+                val returnedToken = json.optString("token", "")
+                if (returnedToken.isNotBlank() && config?.desktopBridgeToken.isNullOrBlank()) {
+                    config?.desktopBridgeToken = returnedToken
+                }
+                true
+            } else {
+                false
+            }
         } catch (e: Exception) {
             false
         }
@@ -245,6 +269,8 @@ class BridgeClient(
             put("text", text)
             put("client", "android")
             if (token.isNotBlank()) put("token", token)
+            val pin = config?.desktopBridgePin ?: ""
+            if (pin.isNotBlank()) put("pin", pin)
         }
         val mediaType = "application/json; charset=utf-8".toMediaType()
         val body = json.toString().toRequestBody(mediaType)

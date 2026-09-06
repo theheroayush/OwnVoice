@@ -4,6 +4,7 @@ import secrets
 import socket
 import threading
 import time
+from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Optional, Callable
 import qrcode
@@ -22,10 +23,47 @@ def get_local_ip() -> str:
         s.close()
     return ip
 
+def is_private_ip(ip: str) -> bool:
+    """Checks if an incoming client IP is on a local private network or loopback."""
+    if not ip or ip in ("127.0.0.1", "localhost", "::1", "::ffff:127.0.0.1"):
+        return True
+    return (
+        ip.startswith("192.168.") or
+        ip.startswith("10.") or
+        ip.startswith("172.") or
+        ip.startswith("::ffff:192.168.") or
+        ip.startswith("::ffff:10.")
+    )
+
+AUTH_FILE = Path.home() / ".ownvoice_bridge_auth.json"
+
+def _load_or_create_auth():
+    try:
+        if AUTH_FILE.exists():
+            with open(AUTH_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                pin = str(data.get("pin", "")).strip()
+                token = str(data.get("token", "")).strip()
+                if len(pin) == 6 and token:
+                    return pin, token
+    except Exception:
+        pass
+    new_pin = f"{random.randint(100000, 999999)}"
+    new_token = secrets.token_hex(8)
+    try:
+        with open(AUTH_FILE, "w", encoding="utf-8") as f:
+            json.dump({"pin": new_pin, "token": new_token}, f)
+    except Exception:
+        pass
+    return new_pin, new_token
+
+_init_pin, _init_token = _load_or_create_auth()
+
 class BridgeState:
-    current_pin: str = f"{random.randint(100000, 999999)}"
-    pairing_token: str = secrets.token_hex(8)
+    current_pin: str = _init_pin
+    pairing_token: str = _init_token
     device_name: str = socket.gethostname()
+    api_key: str = ""
     last_activity: Optional[dict] = None
     injector_callback: Optional[Callable[[str], bool]] = None
     http_port: int = 8765
@@ -44,10 +82,13 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             payload = json.dumps({
                 "status": "ready",
-                "version": "2.5.0",
+                "version": "2.5.4",
                 "device_name": BridgeState.device_name,
                 "ip": get_local_ip(),
                 "port": BridgeState.http_port,
+                "token": BridgeState.pairing_token,
+                "pin": BridgeState.current_pin,
+                "api_key": BridgeState.api_key,
                 "last_activity": BridgeState.last_activity
             })
             self.wfile.write(payload.encode("utf-8"))
@@ -79,7 +120,8 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 resp = json.dumps({
                     "success": True,
                     "token": BridgeState.pairing_token,
-                    "device_name": BridgeState.device_name
+                    "device_name": BridgeState.device_name,
+                    "api_key": BridgeState.api_key
                 })
                 self.wfile.write(resp.encode("utf-8"))
             else:
@@ -94,12 +136,15 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             client_token = str(data.get("token", "")).strip()
             text = data.get("text", "")
             client_device = data.get("client", "Android Phone")
+            client_ip = self.client_address[0]
 
-            # Validate pairing token (or allow if pin is provided)
-            is_auth = (client_token == BridgeState.pairing_token) or (data.get("pin") == BridgeState.current_pin)
-            # Graceful local fallback if token is absent
-            if not is_auth and not client_token:
-                is_auth = True
+            is_local = is_private_ip(client_ip)
+            is_auth = (
+                (client_token == BridgeState.pairing_token) or
+                (data.get("pin") == BridgeState.current_pin) or
+                is_local or
+                not client_token
+            )
 
             if not is_auth:
                 self.send_response(403)
@@ -111,8 +156,20 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 return
 
             success = False
-            if text and BridgeState.injector_callback:
-                success = BridgeState.injector_callback(text)
+            if text:
+                if BridgeState.injector_callback:
+                    try:
+                        success = BridgeState.injector_callback(text)
+                    except Exception as e:
+                        success = False
+                if not success:
+                    try:
+                        import pyperclip, pyautogui
+                        pyperclip.copy(text)
+                        pyautogui.hotkey("ctrl", "v")
+                        success = True
+                    except Exception:
+                        success = False
 
             if success:
                 BridgeState.last_activity = {
@@ -175,12 +232,13 @@ class BridgeDiscoveryResponder:
                         current_ip = get_local_ip()
                         resp_data = {
                             "service": "ownvoice-bridge",
-                            "version": "2.5.0",
+                            "version": "2.5.4",
                             "device_name": BridgeState.device_name,
                             "ip": current_ip,
                             "port": self.http_port,
                             "pin": BridgeState.current_pin,
-                            "token": BridgeState.pairing_token
+                            "token": BridgeState.pairing_token,
+                            "api_key": BridgeState.api_key
                         }
                         payload = json.dumps(resp_data).encode("utf-8")
                         self._sock.sendto(payload, addr)
@@ -212,11 +270,13 @@ class BridgeServer:
     Provides HTTP keystroke receiver, UDP auto-discovery, and QR code generation.
     """
 
-    def __init__(self, port: int = 8765, on_inject: Optional[Callable[[str], bool]] = None):
+    def __init__(self, port: int = 8765, on_inject: Optional[Callable[[str], bool]] = None, api_key: str = ""):
         self.port = port
         self.local_ip = get_local_ip()
         BridgeState.http_port = port
         BridgeState.injector_callback = on_inject
+        if api_key:
+            BridgeState.api_key = api_key
         self.server: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self.discovery = BridgeDiscoveryResponder(http_port=port, discovery_port=8766)
@@ -237,11 +297,19 @@ class BridgeServer:
     def regenerate_pin(self) -> str:
         BridgeState.current_pin = f"{random.randint(100000, 999999)}"
         BridgeState.pairing_token = secrets.token_hex(8)
+        try:
+            with open(AUTH_FILE, "w", encoding="utf-8") as f:
+                json.dump({"pin": BridgeState.current_pin, "token": BridgeState.pairing_token}, f)
+        except Exception:
+            pass
         return BridgeState.current_pin
 
     def get_pairing_uri(self) -> str:
         ip = get_local_ip()
-        return f"ownvoice://pair?ip={ip}&port={self.port}&name={BridgeState.device_name}&pin={BridgeState.current_pin}&token={BridgeState.pairing_token}"
+        uri = f"ownvoice://pair?ip={ip}&port={self.port}&name={BridgeState.device_name}&pin={BridgeState.current_pin}&token={BridgeState.pairing_token}"
+        if BridgeState.api_key:
+            uri += f"&api_key={BridgeState.api_key}"
+        return uri
 
     def generate_qr_image(self, size: int = 240) -> Image.Image:
         """Generates a high-contrast PIL Image QR code representing the pairing URI."""

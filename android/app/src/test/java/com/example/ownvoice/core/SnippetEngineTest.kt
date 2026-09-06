@@ -123,7 +123,7 @@ class SnippetEngineTest {
 
     @Test
     fun testBridgeQrUriParsing() {
-        val uriStr = "ownvoice://pair?ip=192.168.1.15&port=8765&name=Ayush-Laptop&pin=849201&token=7f8b9a1c4d2e"
+        val uriStr = "ownvoice://pair?ip=192.168.1.15&port=8765&name=Ayush-Laptop&pin=849201&token=7f8b9a1c4d2e&api_key=AIzaSyTestKey123"
         val parsed = java.net.URI(uriStr)
         assertEquals("ownvoice", parsed.scheme)
         assertEquals("pair", parsed.host)
@@ -136,6 +136,7 @@ class SnippetEngineTest {
         assertEquals("Ayush-Laptop", queryPairs["name"])
         assertEquals("849201", queryPairs["pin"])
         assertEquals("7f8b9a1c4d2e", queryPairs["token"])
+        assertEquals("AIzaSyTestKey123", queryPairs["api_key"])
     }
 
     @Test
@@ -143,12 +144,13 @@ class SnippetEngineTest {
         val jsonStr = """
             {
                 "service": "ownvoice-bridge",
-                "version": "2.5.0",
+                "version": "2.5.4",
                 "device_name": "Ayush-PC",
                 "ip": "192.168.1.50",
                 "port": 8765,
                 "pin": "123456",
-                "token": "abcdef123456"
+                "token": "abcdef123456",
+                "api_key": "AIzaSyTestKey123"
             }
         """.trimIndent()
         val json = org.json.JSONObject(jsonStr)
@@ -158,5 +160,6 @@ class SnippetEngineTest {
         assertEquals(8765, json.getInt("port"))
         assertEquals("123456", json.getString("pin"))
         assertEquals("abcdef123456", json.getString("token"))
+        assertEquals("AIzaSyTestKey123", json.getString("api_key"))
     }
 }

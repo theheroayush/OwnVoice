@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from config import ConfigManager
 from core.context_detector import ContextDetector
 from core.ai_engine import AIEngine, DICTATION_PROMPTS, FALLBACK_MODELS
@@ -49,9 +49,9 @@ class TestF21V2Intelligence(unittest.TestCase):
 
     def test_models_inventory_valid_google_ai_studio(self):
         """Verify FALLBACK_MODELS lists valid, live Gemini models."""
-        self.assertIn("gemini-2.5-flash", FALLBACK_MODELS)
-        self.assertIn("gemini-2.0-flash", FALLBACK_MODELS)
-        self.assertIn("gemini-1.5-flash", FALLBACK_MODELS)
+        self.assertIn("gemini-3.6-flash", FALLBACK_MODELS)
+        self.assertIn("gemini-3.5-flash-lite", FALLBACK_MODELS)
+        self.assertIn("gemini-3.5-flash", FALLBACK_MODELS)
 
     def test_sound_effects_api(self):
         """Verify SoundEffects class provides start, stop, success, and error cues."""

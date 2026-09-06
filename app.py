@@ -93,7 +93,11 @@ class OwnVoiceApp:
         sound_effects.enabled = self.config.get("sound_effects", True)
         self.active_context_mode = "smart_flow"
         self.active_context_label = ""
-        self.bridge_server = BridgeServer(port=8765, on_inject=self.injector.inject_text)
+        self.bridge_server = BridgeServer(
+            port=8765,
+            on_inject=self.injector.inject_text,
+            api_key=self.config.get("google_api_key", "")
+        )
         self.bridge_server.start()
 
         self.overlay = FloatingWidget(
@@ -357,7 +361,11 @@ def run_bridge_only():
     ensure_default_desktop()
     log_event("Starting OwnVoice in Headless Ecosystem Bridge Mode...")
     injector = CursorInjector(config_manager)
-    server = BridgeServer(port=8765, on_inject=injector.inject_text)
+    server = BridgeServer(
+        port=8765,
+        on_inject=injector.inject_text,
+        api_key=config_manager.get("google_api_key", "")
+    )
     server.start()
     print("\n" + "=" * 60)
     print("  [*] OwnVoice Ecosystem Bridge Active (v2.5.0 Universal)")

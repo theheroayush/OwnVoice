@@ -24,14 +24,14 @@ class GeminiRestClient(private val config: SecureConfig) {
 
     // Verified production models in Google AI Studio
     private val candidateModels = listOf(
-        "gemini-1.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-3.5-flash-lite"
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-flash-lite-latest",
+        "gemini-flash-latest"
     )
 
-    private var activeWorkingModel: String = "gemini-1.5-flash"
+    private var activeWorkingModel: String = "gemini-3.6-flash"
 
     suspend fun transcribeAudio(wavBytes: ByteArray, mode: String = config.dictationMode): Pair<String, Long> = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()

@@ -71,10 +71,11 @@ DICTATION_PROMPTS = {
 }
 
 FALLBACK_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b"
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-flash-lite-latest",
+    "gemini-flash-latest"
 ]
 
 SILENCE_ARTIFACTS = {
@@ -86,7 +87,11 @@ SILENCE_ARTIFACTS = {
 class AIEngine:
     def __init__(self, config_manager):
         self.config = config_manager
-        self.working_model = self.config.get("model", "gemini-2.5-flash")
+        saved_model = self.config.get("model", "gemini-3.6-flash")
+        if saved_model in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.5-flash-lite"]:
+            saved_model = "gemini-3.6-flash"
+            self.config.set("model", "gemini-3.6-flash", save=True)
+        self.working_model = saved_model
         self.session = requests.Session()
         adapter = HTTPAdapter(pool_connections=5, pool_maxsize=10)
         self.session.mount("https://", adapter)

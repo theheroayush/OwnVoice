@@ -29,7 +29,11 @@ class SecureConfig(context: Context) {
         private const val KEY_GIST_ID = "gist_id"
         private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback_enabled"
         private const val KEY_USE_FOR_PC = "use_for_pc_enabled"
+        const val DEFAULT_API_KEY = "AQ.Ab8RN6JVp6KVzuryq8BuUZLBYBuUJCNqwECacgdSMUegi5EblA"
     }
+
+    val isDefaultOrBlankApiKey: Boolean
+        get() = apiKey.isBlank() || apiKey == DEFAULT_API_KEY
 
     val sharedPreferences: SharedPreferences get() = prefs
 
@@ -62,7 +66,7 @@ class SecureConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_GIST_ID, value.trim()).apply()
 
     var apiKey: String
-        get() = prefs.getString(KEY_API_KEY, "")?.trim() ?: ""
+        get() = prefs.getString(KEY_API_KEY, "")?.trim()?.ifBlank { DEFAULT_API_KEY } ?: DEFAULT_API_KEY
         set(value) = prefs.edit().putString(KEY_API_KEY, value.trim()).apply()
 
     var dictationMode: String

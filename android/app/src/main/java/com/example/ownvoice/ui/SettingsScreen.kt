@@ -108,6 +108,7 @@ fun SettingsScreen(
                     val name = parsed.getQueryParameter("name") ?: "Windows PC"
                     val token = parsed.getQueryParameter("token") ?: ""
                     val pin = parsed.getQueryParameter("pin") ?: ""
+                    val qrApiKey = parsed.getQueryParameter("api_key") ?: ""
                     if (ip.isNotBlank()) {
                         bridgeIp = ip
                         bridgeName = name
@@ -115,6 +116,9 @@ fun SettingsScreen(
                         app.secureConfig.desktopBridgeName = name
                         if (token.isNotBlank()) app.secureConfig.desktopBridgeToken = token
                         if (pin.isNotBlank()) app.secureConfig.desktopBridgePin = pin
+                        if (qrApiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                            app.secureConfig.apiKey = qrApiKey
+                        }
                         app.secureConfig.isUseForPcEnabled = true
                         isUseForPcEnabled = true
                         bridgeStatusMessage = "✅ Paired with $name ($ip)"
@@ -701,6 +705,9 @@ fun SettingsScreen(
                                             app.secureConfig.desktopBridgeName = pc.name
                                             if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
                                             if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
+                                            if (pc.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                                app.secureConfig.apiKey = pc.apiKey
+                                            }
                                             app.secureConfig.isUseForPcEnabled = true
                                             isUseForPcEnabled = true
                                             bridgeStatusMessage = "⚡ Auto-Paired with ${pc.name} (${pc.ip})!"
@@ -786,6 +793,9 @@ fun SettingsScreen(
                                                     app.secureConfig.desktopBridgeName = pc.name
                                                     if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
                                                     if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
+                                                    if (pc.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                                        app.secureConfig.apiKey = pc.apiKey
+                                                    }
                                                     app.secureConfig.isUseForPcEnabled = true
                                                     isUseForPcEnabled = true
                                                     bridgeStatusMessage = "⚡ Paired with ${pc.name}!"
@@ -1530,6 +1540,9 @@ fun SettingsScreen(
                                         app.secureConfig.desktopBridgeName = res.deviceName
                                         app.secureConfig.desktopBridgeToken = res.token
                                         app.secureConfig.desktopBridgePin = enteredPin
+                                        if (res.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                            app.secureConfig.apiKey = res.apiKey
+                                        }
                                         app.secureConfig.isUseForPcEnabled = true
                                         isUseForPcEnabled = true
                                         bridgeStatusMessage = "✅ Paired with ${res.deviceName}!"
