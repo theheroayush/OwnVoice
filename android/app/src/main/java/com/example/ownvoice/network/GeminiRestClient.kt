@@ -49,6 +49,7 @@ class GeminiRestClient(private val config: SecureConfig) {
             mode = mode,
             customInstructions = config.customInstructions,
             vocabulary = config.getVocabulary(),
+            snippets = config.getSnippets(),
             enableSelfCorrection = config.isSelfCorrectionEnabled
         )
 

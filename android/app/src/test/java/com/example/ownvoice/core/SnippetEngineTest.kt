@@ -73,4 +73,51 @@ class SnippetEngineTest {
         val hindiPrompt = TonePromptManager.getPrompt("translate_hindi")
         assert(hindiPrompt.contains("English-to-Hindi translator"))
     }
+
+    @Test
+    fun testGetPromptWithSnippetsAndPasteCommand() {
+        val prompt = TonePromptManager.getPrompt(
+            mode = "smart_flow",
+            snippets = mapOf("my email" to "ayush@example.com", "meeting link" to "https://cal.com/ayush"),
+            enableSelfCorrection = true
+        )
+        assert(prompt.contains("CLIPBOARD PASTE COMMAND"))
+        assert(prompt.contains("[COMMAND:PASTE]"))
+        assert(prompt.contains("VOICE SNIPPETS & CONTEXTUAL SUBSTITUTIONS"))
+        assert(prompt.contains("my email"))
+        assert(prompt.contains("ayush@example.com"))
+        assert(prompt.contains("meeting link"))
+        assert(prompt.contains("https://cal.com/ayush"))
+    }
+
+    @Test
+    fun testContextualCarrierPhraseLogic() {
+        val snippets = mapOf(
+            "my email" to "ayush@example.com",
+            "meeting link" to "https://cal.com/ayush"
+        )
+        fun expandWithCarrier(input: String): String {
+            var text = input
+            val sorted = snippets.entries.sortedByDescending { it.key.length }
+            for ((trigger, expansion) in sorted) {
+                val clean = trigger.trim()
+                val core = clean.replaceFirst(Regex("^(?i)(?:my|the)\\s+"), "").trim()
+                val triggerRegexPart = if (core.isNotEmpty() && !core.equals(clean, ignoreCase = true)) {
+                    "(?:" + java.util.regex.Pattern.quote(clean) + "|" + java.util.regex.Pattern.quote(core) + ")"
+                } else {
+                    java.util.regex.Pattern.quote(clean)
+                }
+                val carrierPattern = "(?i)\\b(?:please\\s+)?(?:put|insert|give|share|send|type|write|add|paste|here is|here's)\\s+(?:my|the)?\\s*" +
+                    triggerRegexPart + "(?:\\s+(?:here|please|now|link))?\\b"
+                text = text.replace(Regex(carrierPattern), expansion)
+            }
+            return text
+        }
+
+        assertEquals("ayush@example.com", expandWithCarrier("put my email here"))
+        assertEquals("ayush@example.com", expandWithCarrier("put my email"))
+        assertEquals("ayush@example.com", expandWithCarrier("share the email here"))
+        assertEquals("https://cal.com/ayush", expandWithCarrier("give the meeting link"))
+        assertEquals("https://cal.com/ayush", expandWithCarrier("please send the meeting link here"))
+    }
 }

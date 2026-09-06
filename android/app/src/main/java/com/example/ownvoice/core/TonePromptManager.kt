@@ -93,6 +93,7 @@ object TonePromptManager {
         mode: String,
         customInstructions: String = "",
         vocabulary: List<String> = emptyList(),
+        snippets: Map<String, String> = emptyMap(),
         enableSelfCorrection: Boolean = true
     ): String {
         val basePrompt = PROMPTS[mode] ?: PROMPTS["smart_flow"]!!
@@ -103,7 +104,17 @@ object TonePromptManager {
             builder.append("\n- ELIMINATE MISTAKES: If the speaker stumbles, corrects numbers, dates, or names, or changes their mind mid-sentence (e.g. 'call at two, no wait, three PM', 'twenty, sorry thirty-five', 'send to Bob, I mean Alice'), output ONLY the final corrected thought. Never include the mistake or false start.")
             builder.append("\n- ERASURE COMMANDS: If the speaker says ONLY 'scratch that', 'delete that', 'undo that', 'clear that', or 'erase that', output exactly '[COMMAND:DELETE_LAST]'.")
             builder.append("\n- CLEAR ALL COMMANDS: If the speaker says ONLY 'clear all', 'delete line', or 'clear text', output exactly '[COMMAND:CLEAR_ALL]'.")
+            builder.append("\n- CLIPBOARD PASTE COMMAND: If the speaker says ONLY 'paste', 'paste it', 'paste that', or 'paste it here', output exactly '[COMMAND:PASTE]'.")
             builder.append("\n- FORMATTING COMMANDS: If the speaker says 'new line' or 'next line', insert a newline. If they say 'new paragraph', insert two newlines.")
+        }
+
+        if (snippets.isNotEmpty()) {
+            builder.append("\n\nVOICE SNIPPETS & CONTEXTUAL SUBSTITUTIONS:")
+            builder.append("\nThe user has predefined personal snippets. Understand conversational intent when they refer to them:")
+            snippets.forEach { (trigger, expansion) ->
+                builder.append("\n- When the speaker mentions '$trigger' or asks to insert/give/put/share it (e.g. 'put my email here', 'send my email', 'give the meeting link', 'here is my meeting link'), substitute: $expansion")
+            }
+            builder.append("\nEnsure the substitution flows naturally in the sentence without leaving awkward carrier words like 'put ... here'.")
         }
 
         if (vocabulary.isNotEmpty()) {

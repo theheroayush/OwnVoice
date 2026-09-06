@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -75,6 +76,10 @@ fun SettingsScreen(
 
     var showRestrictedSettingsDialog by remember { mutableStateOf(false) }
     var showAddSnippetDialog by remember { mutableStateOf(false) }
+    var showEditSnippetDialog by remember { mutableStateOf(false) }
+    var editingSnippetOriginalKey by remember { mutableStateOf("") }
+    var editSnippetTrigger by remember { mutableStateOf("") }
+    var editSnippetExpansion by remember { mutableStateOf("") }
     var showAddVocabDialog by remember { mutableStateOf(false) }
     var newTrigger by remember { mutableStateOf("") }
     var newExpansion by remember { mutableStateOf("") }
@@ -474,6 +479,12 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            "Tap any snippet to edit trigger or expansion, or tap '+' above to add new:",
+                            fontSize = 12.sp,
+                            color = textMuted
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
                         if (snippets.isEmpty()) {
                             Text("No snippets configured. Tap '+' to add.", color = textMuted, fontSize = 13.sp)
                         } else {
@@ -481,7 +492,14 @@ fun SettingsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 6.dp),
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            editingSnippetOriginalKey = trigger
+                                            editSnippetTrigger = trigger
+                                            editSnippetExpansion = expansion
+                                            showEditSnippetDialog = true
+                                        }
+                                        .padding(vertical = 6.dp, horizontal = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
@@ -489,15 +507,39 @@ fun SettingsScreen(
                                         Text(trigger, fontWeight = FontWeight.Medium, color = Color.White, fontSize = 14.sp)
                                         Text(expansion, color = textMuted, fontSize = 12.sp, maxLines = 1)
                                     }
-                                    IconButton(
-                                        onClick = {
-                                            val updated = snippets.toMutableMap()
-                                            updated.remove(trigger)
-                                            snippets = updated
-                                            app.secureConfig.saveSnippets(updated)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = {
+                                                editingSnippetOriginalKey = trigger
+                                                editSnippetTrigger = trigger
+                                                editSnippetExpansion = expansion
+                                                showEditSnippetDialog = true
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Edit Snippet",
+                                                tint = accentBlue,
+                                                modifier = Modifier.size(16.dp)
+                                            )
                                         }
-                                    ) {
-                                        Icon(imageVector = Icons.Default.Close, contentDescription = "Delete", tint = accentRed, modifier = Modifier.size(18.dp))
+                                        IconButton(
+                                            onClick = {
+                                                val updated = snippets.toMutableMap()
+                                                updated.remove(trigger)
+                                                snippets = updated
+                                                app.secureConfig.saveSnippets(updated)
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = "Delete Snippet",
+                                                tint = accentRed,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -748,6 +790,79 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showAddSnippetDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = cardBg
+        )
+    }
+
+    if (showEditSnippetDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showEditSnippetDialog = false
+                editingSnippetOriginalKey = ""
+                editSnippetTrigger = ""
+                editSnippetExpansion = ""
+            },
+            title = { Text("Edit Voice Snippet", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        "Update the trigger phrase and text expansion for this snippet.",
+                        color = textMuted,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = editSnippetTrigger,
+                        onValueChange = { editSnippetTrigger = it },
+                        label = { Text("Spoken Trigger (e.g. 'my email')") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = editSnippetExpansion,
+                        onValueChange = { editSnippetExpansion = it },
+                        label = { Text("Expanded Text (e.g. 'me@email.com')") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmedTrigger = editSnippetTrigger.trim().lowercase()
+                        val trimmedExpansion = editSnippetExpansion.trim()
+                        if (trimmedTrigger.isNotBlank() && trimmedExpansion.isNotBlank()) {
+                            val updated = snippets.toMutableMap()
+                            if (editingSnippetOriginalKey.isNotBlank() && editingSnippetOriginalKey != trimmedTrigger) {
+                                updated.remove(editingSnippetOriginalKey)
+                            }
+                            updated[trimmedTrigger] = trimmedExpansion
+                            snippets = updated
+                            app.secureConfig.saveSnippets(updated)
+                            showEditSnippetDialog = false
+                            editingSnippetOriginalKey = ""
+                            editSnippetTrigger = ""
+                            editSnippetExpansion = ""
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = accentBlue)
+                ) {
+                    Text("Save Changes")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showEditSnippetDialog = false
+                        editingSnippetOriginalKey = ""
+                        editSnippetTrigger = ""
+                        editSnippetExpansion = ""
+                    }
+                ) {
                     Text("Cancel")
                 }
             },

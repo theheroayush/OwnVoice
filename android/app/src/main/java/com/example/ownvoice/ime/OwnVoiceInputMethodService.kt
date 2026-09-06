@@ -81,6 +81,41 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     private var lastSpeechTime = 0L
     private var speechDetectedInSession = false
     private var dismissJob: Job? = null
+    private var currentClipboardText by mutableStateOf("")
+
+    private fun updateClipboardPreview() {
+        try {
+            val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+            val clipData = clipboard?.primaryClip
+            currentClipboardText = if (clipData != null && clipData.itemCount > 0) {
+                clipData.getItemAt(0)?.coerceToText(this)?.toString()?.trim() ?: ""
+            } else ""
+        } catch (e: Exception) {
+            currentClipboardText = ""
+        }
+    }
+
+    private fun pasteClipboard() {
+        try {
+            val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+            val clipData = clipboard?.primaryClip
+            val clipText = if (clipData != null && clipData.itemCount > 0) {
+                clipData.getItemAt(0)?.coerceToText(this)?.toString() ?: ""
+            } else ""
+
+            if (clipText.isNotBlank()) {
+                currentInputConnection?.commitText(clipText, 1)
+                lastInjectedLength = clipText.length
+                lastInjectedText = clipText
+                performHaptic()
+                statusMessage = "Pasted"
+            } else {
+                statusMessage = "Clipboard is empty"
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("OwnVoiceIME", "pasteClipboard error", e)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -155,9 +190,11 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         activeTone = currentEffectiveTone,
                         snippets = app.secureConfig.getSnippets(),
                         lastInjectedText = lastInjectedText,
+                        clipboardText = currentClipboardText,
                         isBridgeActive = isBridgeActive,
                         isAutoVadActive = isAutoVadActive,
                         desktopBridgeIp = app.secureConfig.desktopBridgeIp,
+                        onPasteClick = { pasteClipboard() },
                         onToggleRecording = { 
                             try {
                                 toggleRecording()
@@ -323,6 +360,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         statusMessage = ""
         lastInjectedLength = 0
         lastInjectedText = ""
+        updateClipboardPreview()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -423,6 +461,14 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                     statusMessage = "Cleared text"
                     delay(1200)
                     if (keyboardState == KeyboardState.IDLE && statusMessage == "Cleared text") {
+                        statusMessage = ""
+                    }
+                } else if (rawTrimmed == "[COMMAND:PASTE]" || normalizedCmd in listOf("paste", "paste it", "paste that", "paste it here", "paste here")) {
+                    pasteClipboard()
+                    keyboardState = KeyboardState.IDLE
+                    statusMessage = "Pasted from clipboard"
+                    delay(1200)
+                    if (keyboardState == KeyboardState.IDLE && statusMessage == "Pasted from clipboard") {
                         statusMessage = ""
                     }
                 } else if (text.isNotBlank()) {
