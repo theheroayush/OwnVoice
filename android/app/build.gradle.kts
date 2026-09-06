@@ -11,8 +11,8 @@ android {
         applicationId = "com.ownvoice.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 13
-        versionName = "2.5.2"
+        versionCode = 14
+        versionName = "2.5.3"
     }
 
     signingConfigs {

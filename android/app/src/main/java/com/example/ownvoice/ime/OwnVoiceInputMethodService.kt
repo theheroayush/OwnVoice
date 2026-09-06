@@ -109,8 +109,17 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                 currentInputConnection?.commitText(clipText, 1)
                 lastInjectedLength = clipText.length
                 lastInjectedText = clipText
+                if (isBridgeActive) {
+                    val app = application as OwnVoiceApplication
+                    val pcIp = app.secureConfig.desktopBridgeIp
+                    if (pcIp.isNotBlank()) {
+                        serviceScope.launch {
+                            bridgeClient.sendToDesktop(pcIp, clipText, token = app.secureConfig.desktopBridgeToken)
+                        }
+                    }
+                }
                 performHaptic()
-                statusMessage = "Pasted"
+                statusMessage = if (isBridgeActive) "Pasted to PC & Phone" else "Pasted"
             } else {
                 statusMessage = "Clipboard is empty"
             }
@@ -130,6 +139,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         geminiClient = GeminiRestClient(app.secureConfig)
         snippetEngine = SnippetEngine(app.secureConfig)
         bridgeClient = BridgeClient(app.secureConfig, this)
+        isBridgeActive = app.secureConfig.isUseForPcEnabled && app.secureConfig.desktopBridgeIp.isNotBlank()
         vibrator = getSystemService(Vibrator::class.java)
 
         // Observe amplitude flow for live waveform & Auto VAD
@@ -256,6 +266,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                         if (first.token.isNotBlank()) {
                                             app.secureConfig.desktopBridgeToken = first.token
                                         }
+                                        app.secureConfig.isUseForPcEnabled = true
                                         isBridgeActive = true
                                         performHaptic()
                                         statusMessage = "Paired: ${first.name}!"
@@ -265,6 +276,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 }
                             } else {
                                 isBridgeActive = !isBridgeActive
+                                app.secureConfig.isUseForPcEnabled = isBridgeActive
                                 performHaptic()
                                 val displayName = app.secureConfig.desktopBridgeName.ifBlank { pcIp }
                                 statusMessage = if (isBridgeActive) "PC Bridge ON: $displayName" else "PC Bridge OFF"
@@ -281,6 +293,14 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 currentInputConnection?.commitText(expansion, 1)
                                 lastInjectedText = expansion
                                 lastInjectedLength = expansion.length
+                                if (isBridgeActive) {
+                                    val pcIp = app.secureConfig.desktopBridgeIp
+                                    if (pcIp.isNotBlank()) {
+                                        serviceScope.launch {
+                                            bridgeClient.sendToDesktop(pcIp, expansion, token = app.secureConfig.desktopBridgeToken)
+                                        }
+                                    }
+                                }
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onSnippetClick error", e)
@@ -386,6 +406,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
         val app = application as OwnVoiceApplication
+        isBridgeActive = app.secureConfig.isUseForPcEnabled && app.secureConfig.desktopBridgeIp.isNotBlank()
         val targetPkg = info?.packageName ?: ""
         currentEffectiveTone = if (app.secureConfig.isAutoContextToneEnabled && targetPkg.isNotBlank()) {
             TonePromptManager.detectModeForPackage(targetPkg)
@@ -531,7 +552,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
 
                     performHaptic()
                     keyboardState = KeyboardState.RESULT
-                    statusMessage = ""
+                    statusMessage = if (isBridgeActive) "Typed to PC & Phone" else ""
 
                     // Smooth auto-dismiss after 10s back to IDLE
                     dismissJob?.cancel()

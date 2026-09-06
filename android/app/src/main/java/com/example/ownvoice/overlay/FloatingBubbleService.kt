@@ -29,6 +29,7 @@ import com.example.ownvoice.audio.AudioRecordStreamer
 import com.example.ownvoice.core.SnippetEngine
 import com.example.ownvoice.core.TonePromptManager
 import com.example.ownvoice.ime.OwnVoiceInputMethodService
+import com.example.ownvoice.network.BridgeClient
 import com.example.ownvoice.network.GeminiRestClient
 import kotlinx.coroutines.*
 import kotlin.math.abs
@@ -49,6 +50,7 @@ class FloatingBubbleService : Service() {
     private lateinit var audioRecorder: AudioRecordStreamer
     private lateinit var geminiClient: GeminiRestClient
     private lateinit var snippetEngine: SnippetEngine
+    private lateinit var bridgeClient: BridgeClient
     private var vibrator: Vibrator? = null
     private var toneGenerator: android.media.ToneGenerator? = null
 
@@ -64,6 +66,7 @@ class FloatingBubbleService : Service() {
         audioRecorder = AudioRecordStreamer(16000)
         geminiClient = GeminiRestClient(app.secureConfig)
         snippetEngine = SnippetEngine(app.secureConfig)
+        bridgeClient = BridgeClient(app.secureConfig, this)
         vibrator = getSystemService(Vibrator::class.java)
         windowManager = getSystemService(WindowManager::class.java)
 
@@ -333,6 +336,15 @@ class FloatingBubbleService : Service() {
                         val (text, _) = geminiClient.transcribeAudio(wavBytes, mode = effectiveTone)
                         if (text.isNotBlank()) {
                             val expanded = snippetEngine.expand(text)
+                            if (app.secureConfig.isUseForPcEnabled && app.secureConfig.desktopBridgeIp.isNotBlank()) {
+                                serviceScope.launch(Dispatchers.IO) {
+                                    bridgeClient.sendToDesktop(
+                                        desktopIp = app.secureConfig.desktopBridgeIp,
+                                        text = expanded,
+                                        token = app.secureConfig.desktopBridgeToken
+                                    )
+                                }
+                            }
                             withContext(Dispatchers.Main) {
                                 // Tier 1: Direct native InputConnection injection if OwnVoice keyboard is active
                                 var typed = false

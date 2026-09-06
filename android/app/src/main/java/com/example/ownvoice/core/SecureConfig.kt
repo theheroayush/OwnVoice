@@ -28,6 +28,7 @@ class SecureConfig(context: Context) {
         private const val KEY_GIST_TOKEN = "gist_token"
         private const val KEY_GIST_ID = "gist_id"
         private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback_enabled"
+        private const val KEY_USE_FOR_PC = "use_for_pc_enabled"
     }
 
     val sharedPreferences: SharedPreferences get() = prefs
@@ -47,6 +48,10 @@ class SecureConfig(context: Context) {
     var desktopBridgePin: String
         get() = prefs.getString(KEY_DESKTOP_BRIDGE_PIN, "") ?: ""
         set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_PIN, value.trim()).apply()
+
+    var isUseForPcEnabled: Boolean
+        get() = prefs.getBoolean(KEY_USE_FOR_PC, desktopBridgeIp.isNotBlank())
+        set(value) = prefs.edit().putBoolean(KEY_USE_FOR_PC, value).apply()
 
     var gistToken: String
         get() = prefs.getString(KEY_GIST_TOKEN, "") ?: ""

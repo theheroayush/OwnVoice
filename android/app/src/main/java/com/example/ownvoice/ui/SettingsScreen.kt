@@ -36,9 +36,13 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.ownvoice.OwnVoiceApplication
 import com.example.ownvoice.R
+import com.example.ownvoice.audio.AudioRecordStreamer
+import com.example.ownvoice.network.GeminiRestClient
 import com.example.ownvoice.overlay.FloatingBubbleService
 import com.example.ownvoice.overlay.OverlayAccessibilityService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -70,6 +74,7 @@ fun SettingsScreen(
     var vocabulary by remember { mutableStateOf(app.secureConfig.getVocabulary()) }
     var bridgeIp by remember { mutableStateOf(app.secureConfig.desktopBridgeIp) }
     var bridgeName by remember { mutableStateOf(app.secureConfig.desktopBridgeName) }
+    var isUseForPcEnabled by remember { mutableStateOf(app.secureConfig.isUseForPcEnabled) }
     var isSearchingPC by remember { mutableStateOf(false) }
     var discoveredPCs by remember { mutableStateOf(listOf<com.example.ownvoice.network.DiscoveredDesktop>()) }
     var bridgeStatusMessage by remember { mutableStateOf("") }
@@ -78,6 +83,20 @@ fun SettingsScreen(
     var targetPinIp by remember { mutableStateOf("") }
     var showManualIp by remember { mutableStateOf(false) }
     val bridgeClient = remember { com.example.ownvoice.network.BridgeClient(app.secureConfig, context) }
+
+    val audioRecorder = remember { AudioRecordStreamer(16000) }
+    val geminiClient = remember { GeminiRestClient(app.secureConfig) }
+    var isPcDictating by remember { mutableStateOf(false) }
+    var isPcProcessing by remember { mutableStateOf(false) }
+    var pcDictateFeedback by remember { mutableStateOf("") }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            if (isPcDictating) {
+                audioRecorder.cancelRecording()
+            }
+        }
+    }
 
     val qrScanLauncher = rememberLauncherForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
         if (result.contents != null) {
@@ -96,6 +115,8 @@ fun SettingsScreen(
                         app.secureConfig.desktopBridgeName = name
                         if (token.isNotBlank()) app.secureConfig.desktopBridgeToken = token
                         if (pin.isNotBlank()) app.secureConfig.desktopBridgePin = pin
+                        app.secureConfig.isUseForPcEnabled = true
+                        isUseForPcEnabled = true
                         bridgeStatusMessage = "✅ Paired with $name ($ip)"
                     }
                 } catch (e: Exception) {
@@ -307,25 +328,44 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 2: Universal PC Link (Ecosystem Bridge) - FRONT AND CENTER
+            // Section 2: Universal PC Link - FRONT AND CENTER
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("UNIVERSAL PC LINK (ECOSYSTEM BRIDGE)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accentBlue)
+                    Text(
+                        text = "UNIVERSAL PC LINK",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accentBlue,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = if (bridgeIp.isNotBlank()) accentGreen.copy(alpha = 0.2f) else Color(0xFF33333F)
                     ) {
-                        Text(
-                            text = if (bridgeIp.isNotBlank()) "🟢 CONNECTED" else "⚪ READY TO PAIR",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (bridgeIp.isNotBlank()) accentGreen else textMuted,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(3.dp),
+                                color = if (bridgeIp.isNotBlank()) accentGreen else Color(0xFF8E8E93),
+                                modifier = Modifier.size(6.dp)
+                            ) {}
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (bridgeIp.isNotBlank()) "CONNECTED" else "READY TO PAIR",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (bridgeIp.isNotBlank()) accentGreen else textMuted,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
             }
@@ -405,6 +445,8 @@ fun SettingsScreen(
                                                 app.secureConfig.desktopBridgeName = ""
                                                 app.secureConfig.desktopBridgeToken = ""
                                                 app.secureConfig.desktopBridgePin = ""
+                                                app.secureConfig.isUseForPcEnabled = false
+                                                isUseForPcEnabled = false
                                                 bridgeStatusMessage = "Unpaired"
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF442222)),
@@ -412,6 +454,199 @@ fun SettingsScreen(
                                             shape = RoundedCornerShape(6.dp)
                                         ) {
                                             Text("Unpair", fontSize = 11.sp, color = accentRed)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Feature: "Use for PC" Direct Streaming & Dictation Card
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isUseForPcEnabled && bridgeIp.isNotBlank()) Color(0xFF132838) else Color(0xFF22222B),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isUseForPcEnabled && bridgeIp.isNotBlank()) accentGreen.copy(alpha = 0.6f) else Color(0xFF2E2E3A)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Use for PC",
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White,
+                                                fontSize = 15.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            if (isUseForPcEnabled && bridgeIp.isNotBlank()) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = accentGreen.copy(alpha = 0.2f)
+                                                ) {
+                                                    Text(
+                                                        text = "STREAMING ACTIVE",
+                                                        color = accentGreen,
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        Text(
+                                            text = if (bridgeIp.isNotBlank()) {
+                                                "When enabled, speaking types directly into your PC's active cursor."
+                                            } else {
+                                                "Connect your computer below to activate live PC cursor typing."
+                                            },
+                                            fontSize = 11.sp,
+                                            color = textMuted,
+                                            modifier = Modifier.padding(top = 3.dp)
+                                        )
+                                    }
+
+                                    Switch(
+                                        checked = isUseForPcEnabled && bridgeIp.isNotBlank(),
+                                        enabled = bridgeIp.isNotBlank(),
+                                        onCheckedChange = { checked ->
+                                            isUseForPcEnabled = checked
+                                            app.secureConfig.isUseForPcEnabled = checked
+                                            bridgeStatusMessage = if (checked) {
+                                                "💻 Use for PC enabled! Speak below or use your keyboard."
+                                            } else {
+                                                "PC streaming paused."
+                                            }
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = accentGreen,
+                                            uncheckedThumbColor = Color.Gray,
+                                            uncheckedTrackColor = Color(0xFF33333F)
+                                        )
+                                    )
+                                }
+
+                                // Interactive In-App Mic when "Use for PC" is enabled
+                                if (isUseForPcEnabled && bridgeIp.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    HorizontalDivider(color = Color(0xFF28384A))
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "PIN CURSOR ON PC & SPEAK INTO PHONE:",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = accentBlue,
+                                            letterSpacing = 0.5.sp
+                                        )
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        Button(
+                                            onClick = {
+                                                if (!hasMicPermission) {
+                                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                                    return@Button
+                                                }
+                                                if (app.secureConfig.apiKey.isBlank()) {
+                                                    bridgeStatusMessage = "⚠️ Please enter your Gemini API Key in AI Settings below."
+                                                    return@Button
+                                                }
+
+                                                if (!isPcDictating) {
+                                                    val started = audioRecorder.startRecording()
+                                                    if (started) {
+                                                        isPcDictating = true
+                                                        isPcProcessing = false
+                                                        pcDictateFeedback = "🎙️ Listening... Speak naturally, tap again when done"
+                                                    } else {
+                                                        pcDictateFeedback = "❌ Microphone is busy. Try again."
+                                                    }
+                                                } else {
+                                                    isPcDictating = false
+                                                    isPcProcessing = true
+                                                    pcDictateFeedback = "⏳ Transcribing & typing into PC cursor..."
+
+                                                    scope.launch {
+                                                        val wavBytes = withContext(Dispatchers.IO) {
+                                                            audioRecorder.stopRecording()
+                                                        }
+                                                        if (wavBytes.isNotEmpty() && wavBytes.size >= 400) {
+                                                            try {
+                                                                val (text, _) = geminiClient.transcribeAudio(
+                                                                    wavBytes,
+                                                                    mode = app.secureConfig.dictationMode
+                                                                )
+                                                                if (text.isNotBlank()) {
+                                                                    val expanded = app.secureConfig.getSnippets().entries.fold(text) { acc, (k, v) ->
+                                                                        acc.replace(k, v)
+                                                                    }
+                                                                    val ok = bridgeClient.sendToDesktop(
+                                                                        desktopIp = bridgeIp,
+                                                                        text = expanded,
+                                                                        token = app.secureConfig.desktopBridgeToken
+                                                                    )
+                                                                    if (ok) {
+                                                                        pcDictateFeedback = "✅ Typed to PC: \"$expanded\""
+                                                                    } else {
+                                                                        pcDictateFeedback = "❌ PC didn't respond. Ensure OwnVoice is running on PC."
+                                                                    }
+                                                                } else {
+                                                                    pcDictateFeedback = "⚠️ No speech detected (silence)"
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                pcDictateFeedback = "❌ Error: ${e.message ?: "Transcription failed"}"
+                                                            }
+                                                        } else {
+                                                            pcDictateFeedback = "⚠️ Audio too short. Speak and tap to send."
+                                                        }
+                                                        isPcProcessing = false
+                                                    }
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isPcDictating) accentRed else if (isPcProcessing) Color(0xFF244CA8) else accentGreen
+                                            ),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                                            enabled = !isPcProcessing
+                                        ) {
+                                            if (isPcProcessing) {
+                                                CircularProgressIndicator(
+                                                    color = Color.White,
+                                                    modifier = Modifier.size(20.dp),
+                                                    strokeWidth = 2.dp
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text("Transcribing to PC…", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            } else if (isPcDictating) {
+                                                Text("⏹️ Tap to Stop & Type to PC", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            } else {
+                                                Text("🎙️ Tap to Speak to PC Cursor", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            }
+                                        }
+
+                                        if (pcDictateFeedback.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = pcDictateFeedback,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = if (pcDictateFeedback.startsWith("✅")) accentGreen else if (pcDictateFeedback.startsWith("❌") || pcDictateFeedback.startsWith("⚠️")) Color(0xFFFF9500) else accentBlue
+                                            )
                                         }
                                     }
                                 }
@@ -466,6 +701,8 @@ fun SettingsScreen(
                                             app.secureConfig.desktopBridgeName = pc.name
                                             if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
                                             if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
+                                            app.secureConfig.isUseForPcEnabled = true
+                                            isUseForPcEnabled = true
                                             bridgeStatusMessage = "⚡ Auto-Paired with ${pc.name} (${pc.ip})!"
                                         } else {
                                             bridgeStatusMessage = "Found ${found.size} PCs on Wi-Fi. Tap below to pair."
@@ -549,6 +786,8 @@ fun SettingsScreen(
                                                     app.secureConfig.desktopBridgeName = pc.name
                                                     if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
                                                     if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
+                                                    app.secureConfig.isUseForPcEnabled = true
+                                                    isUseForPcEnabled = true
                                                     bridgeStatusMessage = "⚡ Paired with ${pc.name}!"
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = accentGreen),
@@ -1291,6 +1530,8 @@ fun SettingsScreen(
                                         app.secureConfig.desktopBridgeName = res.deviceName
                                         app.secureConfig.desktopBridgeToken = res.token
                                         app.secureConfig.desktopBridgePin = enteredPin
+                                        app.secureConfig.isUseForPcEnabled = true
+                                        isUseForPcEnabled = true
                                         bridgeStatusMessage = "✅ Paired with ${res.deviceName}!"
                                         showPinDialog = false
                                     } else {

@@ -256,6 +256,44 @@ fun KeyboardView(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        // Prominent PC Bridge Toggle Pill
+                        item {
+                            val isPaired = desktopBridgeIp.isNotBlank()
+                            val pcColor = if (isBridgeActive) Color(0xFF00C7BE) else keyBorder
+                            val dotColor = if (isBridgeActive) Color(0xFF34C759) else if (isPaired) Color(0xFF8E8E93) else Color(0xFFFF9500)
+                            val pcLabel = when {
+                                isBridgeActive -> "💻 PC: ON"
+                                isPaired -> "💻 PC: OFF"
+                                else -> "💻 PC Link"
+                            }
+                            Surface(
+                                color = if (isBridgeActive) Color(0xFF00C7BE).copy(alpha = 0.22f) else keyBg,
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, pcColor),
+                                modifier = Modifier.clickable { onToggleBridge() }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(3.dp),
+                                        color = dotColor,
+                                        modifier = Modifier.size(6.dp)
+                                    ) {}
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = pcLabel,
+                                        color = if (isBridgeActive) Color.White else toolbarIconTint,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isBridgeActive) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }
+
                         // Quick 1-Tap Paste Pill
                         if (clipboardText.isNotBlank()) {
                             item {
