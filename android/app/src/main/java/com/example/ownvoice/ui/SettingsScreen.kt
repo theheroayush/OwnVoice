@@ -420,7 +420,7 @@ fun SettingsScreen(
                                     if (bridgeIp.isNotBlank()) {
                                         Text("Host: $bridgeIp:8765", fontSize = 11.sp, color = textMuted)
                                     } else {
-                                        Text("Follow 3-step setup guide below to link", fontSize = 11.sp, color = textMuted)
+                                        Text("No PC linked. Tap Auto-Discover or enter PIN below", fontSize = 11.sp, color = Color(0xFFFFCC00))
                                     }
                                 }
 
@@ -429,9 +429,13 @@ fun SettingsScreen(
                                         Button(
                                             onClick = {
                                                 scope.launch {
-                                                    bridgeStatusMessage = "Testing connection..."
+                                                    bridgeStatusMessage = "Testing connection to $bridgeIp:8765..."
                                                     val alive = bridgeClient.checkStatus(bridgeIp)
-                                                    bridgeStatusMessage = if (alive) "✅ PC Connected & Ready!" else "❌ PC unreachable. Ensure app is running."
+                                                    bridgeStatusMessage = if (alive) {
+                                                        "✅ PC Connected & Ready ($bridgeIp:8765)!"
+                                                    } else {
+                                                        "❌ Unreachable at $bridgeIp:8765. Check app is running on PC & both are on same Wi-Fi."
+                                                    }
                                                 }
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF33333F)),
@@ -598,15 +602,41 @@ fun SettingsScreen(
                                                                     val expanded = app.secureConfig.getSnippets().entries.fold(text) { acc, (k, v) ->
                                                                         acc.replace(k, v)
                                                                     }
-                                                                    val ok = bridgeClient.sendToDesktop(
-                                                                        desktopIp = bridgeIp,
-                                                                        text = expanded,
-                                                                        token = app.secureConfig.desktopBridgeToken
-                                                                    )
-                                                                    if (ok) {
-                                                                        pcDictateFeedback = "✅ Typed to PC: \"$expanded\""
+
+                                                                    var targetIp = bridgeIp.ifBlank { app.secureConfig.desktopBridgeIp }
+                                                                    if (targetIp.isBlank()) {
+                                                                        pcDictateFeedback = "🔍 Auto-discovering PC on local Wi-Fi..."
+                                                                        val found = bridgeClient.discoverLocalDesktops(timeoutMs = 1500)
+                                                                        if (found.isNotEmpty()) {
+                                                                            val pc = found.first()
+                                                                            targetIp = pc.ip
+                                                                            bridgeIp = pc.ip
+                                                                            bridgeName = pc.name
+                                                                            app.secureConfig.desktopBridgeIp = pc.ip
+                                                                            app.secureConfig.desktopBridgeName = pc.name
+                                                                            if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
+                                                                            if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
+                                                                            if (pc.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                                                                app.secureConfig.apiKey = pc.apiKey
+                                                                            }
+                                                                            app.secureConfig.isUseForPcEnabled = true
+                                                                            isUseForPcEnabled = true
+                                                                        }
+                                                                    }
+
+                                                                    if (targetIp.isBlank()) {
+                                                                        pcDictateFeedback = "⚠️ No PC found on Wi-Fi. Tap '⚡ Auto-Discover' or '🔢 PIN' below to link your PC."
                                                                     } else {
-                                                                        pcDictateFeedback = "❌ PC didn't respond. Ensure OwnVoice is running on PC."
+                                                                        val ok = bridgeClient.sendToDesktop(
+                                                                            desktopIp = targetIp,
+                                                                            text = expanded,
+                                                                            token = app.secureConfig.desktopBridgeToken
+                                                                        )
+                                                                        if (ok) {
+                                                                            pcDictateFeedback = "✅ Typed to PC: \"$expanded\""
+                                                                        } else {
+                                                                            pcDictateFeedback = "❌ PC didn't respond at $targetIp:8765. Verify OwnVoice is running on PC."
+                                                                        }
                                                                     }
                                                                 } else {
                                                                     pcDictateFeedback = "⚠️ No speech detected (silence)"

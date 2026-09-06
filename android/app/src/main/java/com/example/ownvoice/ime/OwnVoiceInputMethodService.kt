@@ -538,14 +538,16 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
 
                     if (isBridgeActive) {
                         val app = application as OwnVoiceApplication
-                        val pcIp = app.secureConfig.desktopBridgeIp
-                        if (pcIp.isNotBlank()) {
-                            serviceScope.launch {
-                                bridgeClient.sendToDesktop(
-                                    desktopIp = pcIp,
-                                    text = expanded,
-                                    token = app.secureConfig.desktopBridgeToken
-                                )
+                        serviceScope.launch {
+                            val ok = bridgeClient.sendToDesktop(
+                                desktopIp = app.secureConfig.desktopBridgeIp,
+                                text = expanded,
+                                token = app.secureConfig.desktopBridgeToken
+                            )
+                            if (ok) {
+                                statusMessage = "Typed to PC & Phone"
+                            } else {
+                                statusMessage = "PC unreachable (Check Wi-Fi)"
                             }
                         }
                     }

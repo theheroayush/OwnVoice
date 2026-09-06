@@ -80,6 +80,56 @@ def ensure_default_desktop() -> bool:
         log_event(f"ensure_default_desktop notice: {e}")
         return False
 
+_single_instance_mutex = None
+
+def check_single_instance() -> bool:
+    """
+    Guarantees only one instance of OwnVoice runs at any given time.
+    If an existing instance is active, prevents duplicate process and port collisions.
+    """
+    global _single_instance_mutex
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k32 = ctypes.windll.kernel32
+        ERROR_ALREADY_EXISTS = 183
+        MUTEX_NAME = "Global\\OwnVoice_SingleInstance_Mutex_Ayush"
+        k32.CreateMutexW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.LPCWSTR]
+        k32.CreateMutexW.restype = wintypes.HANDLE
+        _single_instance_mutex = k32.CreateMutexW(None, False, MUTEX_NAME)
+        if k32.GetLastError() == ERROR_ALREADY_EXISTS:
+            current_pid = os.getpid()
+            log_event(f"OwnVoice mutex exists. Checking for active instance (current PID: {current_pid})...")
+            # 1. Check if existing instance is responding on port 8765
+            for _ in range(3):
+                try:
+                    import urllib.request
+                    urllib.request.urlopen("http://127.0.0.1:8765/status", timeout=1.5)
+                    log_event("Existing instance confirmed responsive on port 8765. Exiting duplicate process.")
+                    return False
+                except Exception:
+                    time.sleep(0.4)
+            # 2. Check if another OwnVoice process is alive
+            try:
+                import psutil
+                other_procs = [
+                    p for p in psutil.process_iter(['name', 'pid'])
+                    if p.info['name'] and 'ownvoice' in p.info['name'].lower() and p.info['pid'] != current_pid
+                ]
+                if other_procs:
+                    log_event(f"Another OwnVoice process is actively running (PID {other_procs[0].info['pid']}). Exiting duplicate process.")
+                    return False
+            except Exception as pe:
+                log_event(f"Process inspection notice: {pe}")
+            log_event("No other responsive OwnVoice instance found. Taking over...")
+            return True
+        return True
+    except Exception as e:
+        log_event(f"Single instance check notice: {e}")
+        return True
+
 class OwnVoiceApp:
     def __init__(self):
         ensure_default_desktop()
@@ -96,7 +146,8 @@ class OwnVoiceApp:
         self.bridge_server = BridgeServer(
             port=8765,
             on_inject=self.injector.inject_text,
-            api_key=self.config.get("google_api_key", "")
+            api_key=self.config.get("google_api_key", ""),
+            on_open_link=self.open_phone_link
         )
         self.bridge_server.start()
 
@@ -388,6 +439,14 @@ if __name__ == "__main__":
     if "--bridge-only" in sys.argv or "--headless" in sys.argv:
         run_bridge_only()
     else:
+        if not check_single_instance():
+            if "--link" in sys.argv:
+                try:
+                    import urllib.request
+                    urllib.request.urlopen("http://127.0.0.1:8765/open_link", timeout=1.5)
+                except Exception:
+                    pass
+            sys.exit(0)
         try:
             ensure_default_desktop()
             app = OwnVoiceApp()
@@ -395,6 +454,7 @@ if __name__ == "__main__":
         except Exception as e:
             import traceback
             err = traceback.format_exc()
+            log_event(f"FATAL ERROR: {err}")
             try:
                 (APP_BASE_DIR / "crash.log").write_text(err, encoding="utf-8")
             except Exception:

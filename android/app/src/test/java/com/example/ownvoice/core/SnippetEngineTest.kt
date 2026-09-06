@@ -144,7 +144,7 @@ class SnippetEngineTest {
         val jsonStr = """
             {
                 "service": "ownvoice-bridge",
-                "version": "2.5.4",
+                "version": "2.5.5",
                 "device_name": "Ayush-PC",
                 "ip": "192.168.1.50",
                 "port": 8765,

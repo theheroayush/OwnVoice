@@ -39,9 +39,10 @@ class BridgeClient(
 ) {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(2, TimeUnit.SECONDS)
-        .writeTimeout(2, TimeUnit.SECONDS)
-        .readTimeout(2, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private fun getBroadcastAddresses(): List<InetAddress> {
@@ -231,29 +232,38 @@ class BridgeClient(
      * UDP auto-discovery probe to re-locate the PC and retries automatically.
      */
     suspend fun sendToDesktop(desktopIp: String, text: String, port: Int = 8765, token: String = ""): Boolean = withContext(Dispatchers.IO) {
-        if (desktopIp.isBlank() || text.isBlank()) return@withContext false
+        if (text.isBlank()) return@withContext false
 
-        var effectiveIp = desktopIp
+        var effectiveIp = desktopIp.ifBlank { config?.desktopBridgeIp ?: "" }
         var effectiveToken = token.ifBlank { config?.desktopBridgeToken ?: "" }
 
-        // Attempt 1: Direct injection
-        val success = doInject(effectiveIp, text, port, effectiveToken)
-        if (success) return@withContext true
+        // Attempt 1: Direct injection if IP is known
+        if (effectiveIp.isNotBlank()) {
+            val success = doInject(effectiveIp, text, port, effectiveToken)
+            if (success) return@withContext true
+        }
 
-        // Attempt 2: Dynamic IP Self-Healing
-        val discovered = discoverLocalDesktops(timeoutMs = 1000)
+        // Attempt 2: Dynamic IP Self-Healing & Instant Auto-Discovery
+        val discovered = discoverLocalDesktops(timeoutMs = 1500)
         val matched = discovered.find { 
             (config?.desktopBridgeName?.isNotBlank() == true && it.name == config.desktopBridgeName) ||
             (effectiveToken.isNotBlank() && it.token == effectiveToken) ||
             discovered.size == 1
-        }
+        } ?: discovered.firstOrNull()
 
-        if (matched != null && matched.ip != effectiveIp) {
+        if (matched != null) {
             effectiveIp = matched.ip
             config?.desktopBridgeIp = matched.ip
+            config?.desktopBridgeName = matched.name
             if (matched.token.isNotBlank()) {
                 effectiveToken = matched.token
                 config?.desktopBridgeToken = matched.token
+            }
+            if (matched.pin.isNotBlank()) {
+                config?.desktopBridgePin = matched.pin
+            }
+            if (matched.apiKey.isNotBlank() && config?.isDefaultOrBlankApiKey == true) {
+                config?.apiKey = matched.apiKey
             }
             return@withContext doInject(effectiveIp, text, port, effectiveToken)
         }

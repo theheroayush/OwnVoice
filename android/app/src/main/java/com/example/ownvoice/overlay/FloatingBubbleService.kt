@@ -336,7 +336,7 @@ class FloatingBubbleService : Service() {
                         val (text, _) = geminiClient.transcribeAudio(wavBytes, mode = effectiveTone)
                         if (text.isNotBlank()) {
                             val expanded = snippetEngine.expand(text)
-                            if (app.secureConfig.isUseForPcEnabled && app.secureConfig.desktopBridgeIp.isNotBlank()) {
+                            if (app.secureConfig.isUseForPcEnabled) {
                                 serviceScope.launch(Dispatchers.IO) {
                                     bridgeClient.sendToDesktop(
                                         desktopIp = app.secureConfig.desktopBridgeIp,

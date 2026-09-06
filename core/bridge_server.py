@@ -57,6 +57,13 @@ def _load_or_create_auth():
         pass
     return new_pin, new_token
 
+def log_bridge_event(msg: str):
+    try:
+        from app import log_event
+        log_event(f"[Bridge] {msg}")
+    except Exception:
+        print(f"[Bridge] {msg}")
+
 _init_pin, _init_token = _load_or_create_auth()
 
 class BridgeState:
@@ -66,23 +73,37 @@ class BridgeState:
     api_key: str = ""
     last_activity: Optional[dict] = None
     injector_callback: Optional[Callable[[str], bool]] = None
+    open_link_callback: Optional[Callable[[], None]] = None
     http_port: int = 8765
 
 class BridgeRequestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
-        # Suppress noisy console access logs
+        # Suppress noisy default stderr console logs; we log cleanly to app.log
         pass
 
     def do_GET(self):
-        if self.path == "/status":
+        log_bridge_event(f"GET {self.path} from {self.client_address[0]}")
+        if self.path == "/open_link":
+            if BridgeState.open_link_callback:
+                try:
+                    BridgeState.open_link_callback()
+                except Exception:
+                    pass
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b'{"success": true}')
+            return
+        elif self.path == "/status":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             payload = json.dumps({
                 "status": "ready",
-                "version": "2.5.4",
+                "version": "2.5.5",
                 "device_name": BridgeState.device_name,
                 "ip": get_local_ip(),
                 "port": BridgeState.http_port,
@@ -97,6 +118,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
     def do_POST(self):
+        log_bridge_event(f"POST {self.path} from {self.client_address[0]}")
         content_len = int(self.headers.get("Content-Length", 0))
         post_body = self.rfile.read(content_len)
         try:
@@ -117,6 +139,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                     "time": time.time(),
                     "event": "paired"
                 }
+                log_bridge_event(f"Device paired successfully: {client_device} ({self.client_address[0]})")
                 resp = json.dumps({
                     "success": True,
                     "token": BridgeState.pairing_token,
@@ -129,6 +152,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
+                log_bridge_event(f"PIN mismatch from {self.client_address[0]}: provided '{client_pin}', expected '{BridgeState.current_pin}'")
                 resp = json.dumps({"success": False, "error": "Invalid 6-digit PIN"})
                 self.wfile.write(resp.encode("utf-8"))
 
@@ -151,6 +175,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
+                log_bridge_event(f"Unauthorized injection attempt from {client_ip}")
                 resp = json.dumps({"success": False, "error": "Unauthorized: Token mismatch"})
                 self.wfile.write(resp.encode("utf-8"))
                 return
@@ -178,6 +203,9 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                     "chars": len(text),
                     "event": "injected"
                 }
+                log_bridge_event(f"Injected {len(text)} chars from {client_device} ({client_ip}): '{text[:40]}'")
+            else:
+                log_bridge_event(f"Injection FAILED for {len(text)} chars from {client_device} ({client_ip})")
 
             self.send_response(200 if success else 400)
             self.send_header("Content-Type", "application/json")
@@ -232,7 +260,7 @@ class BridgeDiscoveryResponder:
                         current_ip = get_local_ip()
                         resp_data = {
                             "service": "ownvoice-bridge",
-                            "version": "2.5.4",
+                            "version": "2.5.5",
                             "device_name": BridgeState.device_name,
                             "ip": current_ip,
                             "port": self.http_port,
@@ -264,17 +292,28 @@ class BridgeDiscoveryResponder:
                 pass
 
 
+class CustomHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
 class BridgeServer:
     """
     Universal Wi-Fi Dictation Bridge server for Windows Desktop.
     Provides HTTP keystroke receiver, UDP auto-discovery, and QR code generation.
     """
 
-    def __init__(self, port: int = 8765, on_inject: Optional[Callable[[str], bool]] = None, api_key: str = ""):
+    def __init__(
+        self,
+        port: int = 8765,
+        on_inject: Optional[Callable[[str], bool]] = None,
+        api_key: str = "",
+        on_open_link: Optional[Callable[[], None]] = None
+    ):
         self.port = port
         self.local_ip = get_local_ip()
         BridgeState.http_port = port
         BridgeState.injector_callback = on_inject
+        if on_open_link:
+            BridgeState.open_link_callback = on_open_link
         if api_key:
             BridgeState.api_key = api_key
         self.server: Optional[HTTPServer] = None
@@ -330,14 +369,14 @@ class BridgeServer:
             return
 
         try:
-            self.server = HTTPServer(("0.0.0.0", self.port), BridgeRequestHandler)
+            self.server = CustomHTTPServer(("0.0.0.0", self.port), BridgeRequestHandler)
             self.is_running = True
             self._thread = threading.Thread(target=self.server.serve_forever, daemon=True, name="BridgeServerHTTP")
             self._thread.start()
             self.discovery.start()
-            print(f"[BridgeServer] Listening on {self.local_ip}:{self.port} (UDP Discovery on 8766)")
+            log_bridge_event(f"Listening on {self.local_ip}:{self.port} (UDP Discovery on 8766)")
         except Exception as e:
-            print(f"[BridgeServer] Could not start server: {e}")
+            log_bridge_event(f"Could not start server on port {self.port}: {e}")
             self.is_running = False
 
     def stop(self):
