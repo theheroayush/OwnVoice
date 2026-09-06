@@ -5,14 +5,17 @@ import time
 import math
 from typing import Callable
 
+import sys
+
 # Enable Per-Monitor V2 DPI awareness on Windows 11/10
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except Exception:
+if sys.platform == "win32" and hasattr(ctypes, "windll"):
     try:
-        ctypes.windll.user32.SetProcessDPIAware()
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
-        pass
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
 
 GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
@@ -88,7 +91,11 @@ class FloatingWidget:
         self.root.attributes("-topmost", True)
         
         self.root.config(bg="#000001")
-        self.root.wm_attributes("-transparentcolor", "#000001")
+        if sys.platform == "win32":
+            try:
+                self.root.wm_attributes("-transparentcolor", "#000001")
+            except Exception:
+                pass
 
         # Must call update_idletasks() so Tk creates the underlying Win32 window
         # before querying HWND or applying extended window styles

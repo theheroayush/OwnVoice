@@ -1,12 +1,15 @@
 import os
+import sys
 import time
+import subprocess
 import ctypes
-from ctypes import wintypes
 from typing import Optional
-from pynput.keyboard import Controller
+from pynput.keyboard import Controller, Key
 
-user32 = ctypes.WinDLL("user32")
-kernel32 = ctypes.WinDLL("kernel32")
+IS_WINDOWS = sys.platform == "win32"
+IS_MACOS = sys.platform == "darwin"
+IS_LINUX = sys.platform.startswith("linux")
+
 kb = Controller()
 
 INPUT_KEYBOARD = 1
@@ -20,103 +23,200 @@ CF_UNICODETEXT = 13
 GMEM_MOVEABLE = 0x0002
 SW_RESTORE = 9
 
-class MOUSEINPUT(ctypes.Structure):
-    _fields_ = [
-        ("dx", wintypes.LONG),
-        ("dy", wintypes.LONG),
-        ("mouseData", wintypes.DWORD),
-        ("dwFlags", wintypes.DWORD),
-        ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.c_size_t),
-    ]
+# Safe Win32 type definitions that evaluate on all platforms without crashing
+class _DummyWinDLL:
+    """Fallback dummy DLL object for non-Windows platforms and testing."""
+    def __getattr__(self, name):
+        def _dummy_func(*args, **kwargs):
+            return 0
+        return _dummy_func
 
-class KEYBDINPUT(ctypes.Structure):
-    _fields_ = [
-        ("wVk", wintypes.WORD),
-        ("wScan", wintypes.WORD),
-        ("dwFlags", wintypes.DWORD),
-        ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.c_size_t),
-    ]
+if IS_WINDOWS and hasattr(ctypes, "WinDLL"):
+    from ctypes import wintypes
 
-class HARDWAREINPUT(ctypes.Structure):
-    _fields_ = [
-        ("uMsg", wintypes.DWORD),
-        ("wParamL", wintypes.WORD),
-        ("wParamH", wintypes.WORD),
-    ]
+    user32 = ctypes.WinDLL("user32")
+    kernel32 = ctypes.WinDLL("kernel32")
 
-class _INPUT_UNION(ctypes.Union):
-    _fields_ = [
-        ("mi", MOUSEINPUT),
-        ("ki", KEYBDINPUT),
-        ("hi", HARDWAREINPUT),
-    ]
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", wintypes.LONG),
+            ("dy", wintypes.LONG),
+            ("mouseData", wintypes.DWORD),
+            ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD),
+            ("dwExtraInfo", ctypes.c_size_t),
+        ]
 
-class INPUT(ctypes.Structure):
-    _anonymous_ = ("u",)
-    _fields_ = [
-        ("type", wintypes.DWORD),
-        ("u", _INPUT_UNION),
-    ]
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [
+            ("wVk", wintypes.WORD),
+            ("wScan", wintypes.WORD),
+            ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD),
+            ("dwExtraInfo", ctypes.c_size_t),
+        ]
 
-user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
-user32.SendInput.restype = wintypes.UINT
-user32.OpenClipboard.argtypes = [wintypes.HWND]
-user32.OpenClipboard.restype = wintypes.BOOL
-user32.CloseClipboard.argtypes = []
-user32.CloseClipboard.restype = wintypes.BOOL
-user32.EmptyClipboard.argtypes = []
-user32.EmptyClipboard.restype = wintypes.BOOL
-user32.GetClipboardData.argtypes = [wintypes.UINT]
-user32.GetClipboardData.restype = wintypes.HANDLE
-user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
-user32.SetClipboardData.restype = wintypes.HANDLE
-user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
-user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+    class HARDWAREINPUT(ctypes.Structure):
+        _fields_ = [
+            ("uMsg", wintypes.DWORD),
+            ("wParamL", wintypes.WORD),
+            ("wParamH", wintypes.WORD),
+        ]
 
-kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
-kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
-kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalLock.restype = wintypes.LPVOID
-kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalUnlock.restype = wintypes.BOOL
-kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
-kernel32.GlobalFree.restype = wintypes.HGLOBAL
+    class _INPUT_UNION(ctypes.Union):
+        _fields_ = [
+            ("mi", MOUSEINPUT),
+            ("ki", KEYBDINPUT),
+            ("hi", HARDWAREINPUT),
+        ]
 
-user32.GetForegroundWindow.argtypes = []
-user32.GetForegroundWindow.restype = wintypes.HWND
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
-user32.AttachThreadInput.restype = wintypes.BOOL
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.BringWindowToTop.argtypes = [wintypes.HWND]
-user32.BringWindowToTop.restype = wintypes.BOOL
-user32.IsWindow.argtypes = [wintypes.HWND]
-user32.IsWindow.restype = wintypes.BOOL
-user32.IsIconic.argtypes = [wintypes.HWND]
-user32.IsIconic.restype = wintypes.BOOL
-user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-user32.ShowWindow.restype = wintypes.BOOL
-user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
-user32.keybd_event.restype = None
-kernel32.GetCurrentThreadId.argtypes = []
-kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+    class INPUT(ctypes.Structure):
+        _anonymous_ = ("u",)
+        _fields_ = [
+            ("type", wintypes.DWORD),
+            ("u", _INPUT_UNION),
+        ]
+
+    user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int]
+    user32.SendInput.restype = wintypes.UINT
+    user32.OpenClipboard.argtypes = [wintypes.HWND]
+    user32.OpenClipboard.restype = wintypes.BOOL
+    user32.CloseClipboard.argtypes = []
+    user32.CloseClipboard.restype = wintypes.BOOL
+    user32.EmptyClipboard.argtypes = []
+    user32.EmptyClipboard.restype = wintypes.BOOL
+    user32.GetClipboardData.argtypes = [wintypes.UINT]
+    user32.GetClipboardData.restype = wintypes.HANDLE
+    user32.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+    user32.SetClipboardData.restype = wintypes.HANDLE
+    user32.IsClipboardFormatAvailable.argtypes = [wintypes.UINT]
+    user32.IsClipboardFormatAvailable.restype = wintypes.BOOL
+
+    kernel32.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+    kernel32.GlobalAlloc.restype = wintypes.HGLOBAL
+    kernel32.GlobalLock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalLock.restype = wintypes.LPVOID
+    kernel32.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalUnlock.restype = wintypes.BOOL
+    kernel32.GlobalFree.argtypes = [wintypes.HGLOBAL]
+    kernel32.GlobalFree.restype = wintypes.HGLOBAL
+
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+    user32.AttachThreadInput.restype = wintypes.BOOL
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.BringWindowToTop.restype = wintypes.BOOL
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.IsWindow.restype = wintypes.BOOL
+    user32.IsIconic.argtypes = [wintypes.HWND]
+    user32.IsIconic.restype = wintypes.BOOL
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+    user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+    user32.keybd_event.restype = None
+    kernel32.GetCurrentThreadId.argtypes = []
+    kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+else:
+    user32 = _DummyWinDLL()
+    kernel32 = _DummyWinDLL()
+
+    class INPUT:
+        pass
+
+
+def _mac_get_clipboard() -> str:
+    """Reads system clipboard on macOS via pbpaste."""
+    try:
+        proc = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=1)
+        if proc.returncode == 0:
+            return proc.stdout
+    except Exception:
+        pass
+    return ""
+
+
+def _mac_set_clipboard(text: str) -> bool:
+    """Sets system clipboard on macOS via pbcopy."""
+    try:
+        proc = subprocess.run(["pbcopy"], input=text, text=True, timeout=1)
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
+def _linux_get_clipboard() -> str:
+    """Reads system clipboard on Linux via wl-paste (Wayland) or xclip/xsel (X11)."""
+    try:
+        proc = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True, timeout=1)
+        if proc.returncode == 0:
+            return proc.stdout
+    except Exception:
+        pass
+    try:
+        proc = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True, timeout=1)
+        if proc.returncode == 0:
+            return proc.stdout
+    except Exception:
+        pass
+    try:
+        proc = subprocess.run(["xsel", "--clipboard", "--output"], capture_output=True, text=True, timeout=1)
+        if proc.returncode == 0:
+            return proc.stdout
+    except Exception:
+        pass
+    return ""
+
+
+def _linux_set_clipboard(text: str) -> bool:
+    """Sets system clipboard on Linux via wl-copy (Wayland) or xclip/xsel (X11)."""
+    try:
+        proc = subprocess.run(["wl-copy"], input=text, text=True, timeout=1)
+        if proc.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        proc = subprocess.run(["xclip", "-selection", "clipboard"], input=text, text=True, timeout=1)
+        if proc.returncode == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        proc = subprocess.run(["xsel", "--clipboard", "--input"], input=text, text=True, timeout=1)
+        if proc.returncode == 0:
+            return True
+    except Exception:
+        pass
+    return False
+
 
 class CursorInjector:
+    """
+    Cross-platform cursor and clipboard injector.
+    - Windows: Uses high-performance Win32 SendInput, AttachThreadInput, and native Win32 clipboard API.
+    - macOS: Uses pbcopy/pbpaste and pynput Command+V paste / typing.
+    - Linux: Uses wl-copy/xclip and pynput Ctrl+V paste / typing.
+    """
     def __init__(self, config_manager=None):
         self.config = config_manager
         self.last_target_hwnd: Optional[int] = None
         self.overlay_hwnd: Optional[int] = None
         self._clip_fallback_text = ""
         self.last_injected_length = 0
+        self._last_clip_op_real_win32 = False
 
     def set_overlay_hwnd(self, hwnd: int):
         self.overlay_hwnd = hwnd
 
     def update_target_hwnd(self, hwnd: Optional[int] = None) -> bool:
+        if not (IS_WINDOWS and not isinstance(user32, _DummyWinDLL)):
+            return True
+
         if hwnd is None:
             hwnd = user32.GetForegroundWindow()
         if not hwnd or not user32.IsWindow(hwnd):
@@ -124,6 +224,7 @@ class CursorInjector:
         if hwnd == self.overlay_hwnd:
             return False
 
+        from ctypes import wintypes
         pid = wintypes.DWORD()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if pid.value == os.getpid():
@@ -133,6 +234,9 @@ class CursorInjector:
         return True
 
     def refocus_target(self) -> bool:
+        if not (IS_WINDOWS and not isinstance(user32, _DummyWinDLL)):
+            return True
+
         if not self.last_target_hwnd or not user32.IsWindow(self.last_target_hwnd):
             return False
 
@@ -180,127 +284,178 @@ class CursorInjector:
             return False
 
     def get_clipboard_text(self) -> str:
-        text = ""
-        for attempt in range(5):
-            if user32.OpenClipboard(self.overlay_hwnd):
-                try:
-                    if user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
-                        h_data = user32.GetClipboardData(CF_UNICODETEXT)
-                        if h_data:
-                            ptr = kernel32.GlobalLock(h_data)
-                            if ptr:
-                                try:
-                                    text = ctypes.wstring_at(ptr)
-                                finally:
-                                    kernel32.GlobalUnlock(h_data)
-                    return text
-                finally:
-                    user32.CloseClipboard()
-            time.sleep(0.01 * (attempt + 1))
-        return text or self._clip_fallback_text
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            text = ""
+            for attempt in range(5):
+                if user32.OpenClipboard(self.overlay_hwnd):
+                    try:
+                        if user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+                            h_data = user32.GetClipboardData(CF_UNICODETEXT)
+                            if h_data:
+                                ptr = kernel32.GlobalLock(h_data)
+                                if ptr:
+                                    try:
+                                        text = ctypes.wstring_at(ptr)
+                                    finally:
+                                        kernel32.GlobalUnlock(h_data)
+                        return text
+                    finally:
+                        user32.CloseClipboard()
+                time.sleep(0.01 * (attempt + 1))
+            return text or self._clip_fallback_text
+
+        if IS_MACOS:
+            val = _mac_get_clipboard()
+            return val if val else self._clip_fallback_text
+
+        if IS_LINUX:
+            val = _linux_get_clipboard()
+            return val if val else self._clip_fallback_text
+
+        return self._clip_fallback_text
 
     def set_clipboard_text(self, text: str) -> bool:
         if text is None:
             text = ""
         self._clip_fallback_text = text
         self._last_clip_op_real_win32 = False
-        text_bytes = (text + "\0").encode("utf-16le")
-        nbytes = len(text_bytes)
 
-        hwnds_to_try = [self.overlay_hwnd, None] if self.overlay_hwnd else [None]
-        for attempt in range(5):
-            for h in hwnds_to_try:
-                if user32.OpenClipboard(h):
-                    try:
-                        user32.EmptyClipboard()
-                        h_glob = kernel32.GlobalAlloc(GMEM_MOVEABLE, nbytes)
-                        if not h_glob:
-                            continue
-                        ptr = kernel32.GlobalLock(h_glob)
-                        if not ptr:
-                            kernel32.GlobalFree(h_glob)
-                            continue
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            text_bytes = (text + "\0").encode("utf-16le")
+            nbytes = len(text_bytes)
+
+            hwnds_to_try = [self.overlay_hwnd, None] if self.overlay_hwnd else [None]
+            for attempt in range(5):
+                for h in hwnds_to_try:
+                    if user32.OpenClipboard(h):
                         try:
-                            ctypes.memmove(ptr, text_bytes, nbytes)
+                            user32.EmptyClipboard()
+                            h_glob = kernel32.GlobalAlloc(GMEM_MOVEABLE, nbytes)
+                            if not h_glob:
+                                continue
+                            ptr = kernel32.GlobalLock(h_glob)
+                            if not ptr:
+                                kernel32.GlobalFree(h_glob)
+                                continue
+                            try:
+                                ctypes.memmove(ptr, text_bytes, nbytes)
+                            finally:
+                                kernel32.GlobalUnlock(h_glob)
+                            res = user32.SetClipboardData(CF_UNICODETEXT, h_glob)
+                            if res:
+                                self._last_clip_op_real_win32 = True
+                                return True
+                            else:
+                                kernel32.GlobalFree(h_glob)
                         finally:
-                            kernel32.GlobalUnlock(h_glob)
-                        res = user32.SetClipboardData(CF_UNICODETEXT, h_glob)
-                        if res:
-                            self._last_clip_op_real_win32 = True
-                            return True
-                        else:
-                            kernel32.GlobalFree(h_glob)
-                    finally:
-                        user32.CloseClipboard()
-            time.sleep(0.01 * (attempt + 1))
-        self._last_clip_op_real_win32 = False
-        return False
+                            user32.CloseClipboard()
+                time.sleep(0.01 * (attempt + 1))
+            self._last_clip_op_real_win32 = False
+            return False
+
+        if IS_MACOS:
+            ok = _mac_set_clipboard(text)
+            self._last_clip_op_real_win32 = ok
+            return ok
+
+        if IS_LINUX:
+            ok = _linux_set_clipboard(text)
+            self._last_clip_op_real_win32 = ok
+            return ok
+
+        return True
 
     def _send_ctrl_v(self) -> bool:
-        inputs = (INPUT * 4)()
-        inputs[0].type = INPUT_KEYBOARD
-        inputs[0].ki = KEYBDINPUT(wVk=VK_CONTROL, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
-        inputs[1].type = INPUT_KEYBOARD
-        inputs[1].ki = KEYBDINPUT(wVk=VK_V, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
-        inputs[2].type = INPUT_KEYBOARD
-        inputs[2].ki = KEYBDINPUT(wVk=VK_V, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
-        inputs[3].type = INPUT_KEYBOARD
-        inputs[3].ki = KEYBDINPUT(wVk=VK_CONTROL, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            inputs = (INPUT * 4)()
+            inputs[0].type = INPUT_KEYBOARD
+            inputs[0].ki = KEYBDINPUT(wVk=VK_CONTROL, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
+            inputs[1].type = INPUT_KEYBOARD
+            inputs[1].ki = KEYBDINPUT(wVk=VK_V, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
+            inputs[2].type = INPUT_KEYBOARD
+            inputs[2].ki = KEYBDINPUT(wVk=VK_V, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+            inputs[3].type = INPUT_KEYBOARD
+            inputs[3].ki = KEYBDINPUT(wVk=VK_CONTROL, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
 
-        sent = user32.SendInput(4, inputs, ctypes.sizeof(INPUT))
-        if sent < 4:
-            # Fallback if SendInput is blocked by UIPI elevation
-            try:
-                user32.keybd_event(VK_CONTROL, 0, 0, 0)
-                user32.keybd_event(VK_V, 0, 0, 0)
-                time.sleep(0.02)
-                user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
-                user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
-                return True
-            except Exception:
-                return False
-        return True
-
-    def _send_unicode_string(self, text: str) -> bool:
-        inputs = []
-        for ch in text:
-            code = ord(ch)
-            if code > 0xFFFF:
-                lead = 0xD800 + ((code - 0x10000) >> 10)
-                trail = 0xDC00 + ((code - 0x10000) & 0x3FF)
-                surrogates = [lead, trail]
-            else:
-                surrogates = [code]
-
-            for s in surrogates:
-                inp_down = INPUT()
-                inp_down.type = INPUT_KEYBOARD
-                inp_down.ki = KEYBDINPUT(wVk=0, wScan=s, dwFlags=KEYEVENTF_UNICODE, time=0, dwExtraInfo=0)
-                inputs.append(inp_down)
-
-                inp_up = INPUT()
-                inp_up.type = INPUT_KEYBOARD
-                inp_up.ki = KEYBDINPUT(wVk=0, wScan=s, dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
-                inputs.append(inp_up)
-
-        if not inputs:
+            sent = user32.SendInput(4, inputs, ctypes.sizeof(INPUT))
+            if sent < 4:
+                try:
+                    user32.keybd_event(VK_CONTROL, 0, 0, 0)
+                    user32.keybd_event(VK_V, 0, 0, 0)
+                    time.sleep(0.02)
+                    user32.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0)
+                    user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+                    return True
+                except Exception:
+                    return False
             return True
 
-        total_sent = 0
-        batch_size = 128
-        for i in range(0, len(inputs), batch_size):
-            chunk = inputs[i : i + batch_size]
-            arr = (INPUT * len(chunk))(*chunk)
-            sent = user32.SendInput(len(chunk), arr, ctypes.sizeof(INPUT))
-            total_sent += sent
-
-        if total_sent == 0:
+        if IS_MACOS:
             try:
-                kb.type(text)
+                with kb.pressed(Key.cmd):
+                    kb.tap('v')
                 return True
             except Exception:
                 return False
-        return True
+
+        if IS_LINUX:
+            try:
+                with kb.pressed(Key.ctrl):
+                    kb.tap('v')
+                return True
+            except Exception:
+                return False
+
+        return False
+
+    def _send_unicode_string(self, text: str) -> bool:
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            inputs = []
+            for ch in text:
+                code = ord(ch)
+                if code > 0xFFFF:
+                    lead = 0xD800 + ((code - 0x10000) >> 10)
+                    trail = 0xDC00 + ((code - 0x10000) & 0x3FF)
+                    surrogates = [lead, trail]
+                else:
+                    surrogates = [code]
+
+                for s in surrogates:
+                    inp_down = INPUT()
+                    inp_down.type = INPUT_KEYBOARD
+                    inp_down.ki = KEYBDINPUT(wVk=0, wScan=s, dwFlags=KEYEVENTF_UNICODE, time=0, dwExtraInfo=0)
+                    inputs.append(inp_down)
+
+                    inp_up = INPUT()
+                    inp_up.type = INPUT_KEYBOARD
+                    inp_up.ki = KEYBDINPUT(wVk=0, wScan=s, dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+                    inputs.append(inp_up)
+
+            if not inputs:
+                return True
+
+            total_sent = 0
+            batch_size = 128
+            for i in range(0, len(inputs), batch_size):
+                chunk = inputs[i : i + batch_size]
+                arr = (INPUT * len(chunk))(*chunk)
+                sent = user32.SendInput(len(chunk), arr, ctypes.sizeof(INPUT))
+                total_sent += sent
+
+            if total_sent == 0:
+                try:
+                    kb.type(text)
+                    return True
+                except Exception:
+                    return False
+            return True
+
+        # macOS / Linux direct typing
+        try:
+            kb.type(text)
+            return True
+        except Exception:
+            return False
 
     def erase_last(self, count: Optional[int] = None) -> bool:
         """Erase last injected chunk or specific character count hands-free via backspace."""
@@ -310,7 +465,6 @@ class CursorInjector:
         if n <= 0:
             n = 1
         n = min(n, 500)
-        from pynput.keyboard import Key
         for _ in range(n):
             kb.tap(Key.backspace)
         self.last_injected_length = 0
@@ -320,7 +474,16 @@ class CursorInjector:
         """Clear the current line/field hands-free."""
         self.refocus_target()
         time.sleep(0.05)
-        from pynput.keyboard import Key
+        if IS_MACOS:
+            # On macOS, Cmd+Backspace clears to beginning of line
+            try:
+                with kb.pressed(Key.cmd):
+                    kb.tap(Key.backspace)
+                self.last_injected_length = 0
+                return True
+            except Exception:
+                pass
+
         with kb.pressed(Key.shift):
             kb.tap(Key.home)
         time.sleep(0.02)
@@ -340,14 +503,13 @@ class CursorInjector:
         clip_ok = self.set_clipboard_text(text)
 
         if not clip_ok or not getattr(self, "_last_clip_op_real_win32", False):
-            # Real OS clipboard was inaccessible (e.g. access denied / locked).
-            # Direct Unicode typing fallback via SendInput KEYEVENTF_UNICODE!
+            # Fallback if clipboard was inaccessible: direct typing
             return self._send_unicode_string(text)
 
         time.sleep(0.03)
         self._send_ctrl_v()
 
-        # 250ms post-paste delay so heavy apps (Word, Chrome, Electron) have time to process WM_PASTE before clipboard restore
+        # 250ms post-paste delay so apps process paste before clipboard restore
         time.sleep(0.25)
         if orig_clip:
             self.set_clipboard_text(orig_clip)

@@ -181,11 +181,14 @@ class HotkeyManager:
 
     def start(self):
         if self.listener is None:
-            self.listener = keyboard.Listener(
-                on_press=self._on_press,
-                on_release=self._on_release,
-                win32_event_filter=self._win32_event_filter
-            )
+            kwargs = {
+                "on_press": self._on_press,
+                "on_release": self._on_release,
+            }
+            if sys.platform == "win32":
+                kwargs["win32_event_filter"] = self._win32_event_filter
+
+            self.listener = keyboard.Listener(**kwargs)
             self.listener.daemon = True
             self.listener.start()
 

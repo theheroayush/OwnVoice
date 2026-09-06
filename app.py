@@ -42,12 +42,16 @@ def log_event(msg: str):
 def ensure_default_desktop() -> bool:
     """
     Guarantees the process and calling thread are bound to the user's interactive
-    desktop ('WinSta0' / 'Default'). Prevents UIPI / session isolation failures
-    when launched from background tasks, services, or shortcuts.
+    desktop ('WinSta0' / 'Default') on Windows. On non-Windows platforms, returns True.
     """
+    if sys.platform != "win32":
+        return True
     try:
         import ctypes
         from ctypes import wintypes
+
+        if not hasattr(ctypes, "WinDLL"):
+            return True
 
         u32 = ctypes.WinDLL("user32", use_last_error=True)
 
@@ -337,15 +341,47 @@ class OwnVoiceApp:
                 pass
             raise
 
-if __name__ == "__main__":
-    try:
-        ensure_default_desktop()
-        app = OwnVoiceApp()
-        app.run()
-    except Exception as e:
-        import traceback
-        err = traceback.format_exc()
+def run_bridge_only():
+    """Runs the OwnVoice Ecosystem Bridge as a lightweight, cross-platform daemon."""
+    if hasattr(sys.stdout, "reconfigure"):
         try:
-            (APP_BASE_DIR / "crash.log").write_text(err, encoding="utf-8")
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
+    ensure_default_desktop()
+    log_event("Starting OwnVoice in Headless Ecosystem Bridge Mode...")
+    injector = CursorInjector(config_manager)
+    server = BridgeServer(port=8765, on_inject=injector.inject_text)
+    server.start()
+    print("\n" + "=" * 60)
+    print("  [*] OwnVoice Ecosystem Bridge Active (v2.5.0 Universal)")
+    print(f"  Platform: {sys.platform.upper()}")
+    print(f"  Local IP: {server.local_ip}:{server.port}")
+    print(f"  UDP Auto-Discovery Beacon: Port 8766 Active")
+    print(f"  Session Pairing PIN: {server.current_pin}")
+    print("  Ready to stream text from your Android phone!")
+    print("  Press Ctrl+C to terminate.")
+    print("=" * 60 + "\n")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nStopping bridge server...")
+        server.stop()
+        sys.exit(0)
+
+if __name__ == "__main__":
+    if "--bridge-only" in sys.argv or "--headless" in sys.argv:
+        run_bridge_only()
+    else:
+        try:
+            ensure_default_desktop()
+            app = OwnVoiceApp()
+            app.run()
+        except Exception as e:
+            import traceback
+            err = traceback.format_exc()
+            try:
+                (APP_BASE_DIR / "crash.log").write_text(err, encoding="utf-8")
+            except Exception:
+                pass
