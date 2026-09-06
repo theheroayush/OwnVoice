@@ -377,6 +377,9 @@ if __name__ == "__main__":
         try:
             ensure_default_desktop()
             app = OwnVoiceApp()
+            if "--link" in sys.argv:
+                if app.overlay and app.overlay.root:
+                    app.overlay.root.after(300, app.open_phone_link)
             app.run()
         except Exception as e:
             import traceback

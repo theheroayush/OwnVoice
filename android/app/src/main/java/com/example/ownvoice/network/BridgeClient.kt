@@ -1,5 +1,7 @@
 package com.example.ownvoice.network
 
+import android.content.Context
+import android.net.wifi.WifiManager
 import com.example.ownvoice.core.SecureConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,6 +13,7 @@ import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.net.NetworkInterface
 import java.util.concurrent.TimeUnit
 
 data class DiscoveredDesktop(
@@ -28,7 +31,10 @@ data class PairResult(
     val error: String = ""
 )
 
-class BridgeClient(private val config: SecureConfig? = null) {
+class BridgeClient(
+    private val config: SecureConfig? = null,
+    private val context: Context? = null
+) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(2, TimeUnit.SECONDS)
@@ -36,27 +42,81 @@ class BridgeClient(private val config: SecureConfig? = null) {
         .readTimeout(2, TimeUnit.SECONDS)
         .build()
 
+    private fun getBroadcastAddresses(): List<InetAddress> {
+        val broadcastList = LinkedHashSet<InetAddress>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                val ni = interfaces.nextElement()
+                if (ni.isLoopback || !ni.isUp) continue
+                for (ia in ni.interfaceAddresses) {
+                    ia.broadcast?.let { broadcastList.add(it) }
+                }
+            }
+        } catch (e: Exception) {
+            // ignore network interface scan exceptions
+        }
+        try {
+            broadcastList.add(InetAddress.getByName("255.255.255.255"))
+        } catch (e: Exception) {
+            // ignore
+        }
+        return broadcastList.toList()
+    }
+
     /**
      * Broadcasts a UDP probe on local Wi-Fi port 8766 to discover active OwnVoice desktop instances.
-     * Returns a list of discovered desktops within the timeout window.
+     * Broadcasts to both subnet-directed broadcast addresses and 255.255.255.255.
+     * Acquires WifiManager.MulticastLock when context is available.
      */
-    suspend fun discoverLocalDesktops(timeoutMs: Int = 1500, discoveryPort: Int = 8766): List<DiscoveredDesktop> = withContext(Dispatchers.IO) {
+    suspend fun discoverLocalDesktops(timeoutMs: Int = 1800, discoveryPort: Int = 8766): List<DiscoveredDesktop> = withContext(Dispatchers.IO) {
         val found = mutableListOf<DiscoveredDesktop>()
         var socket: DatagramSocket? = null
+        var multicastLock: WifiManager.MulticastLock? = null
+
         try {
+            context?.let { ctx ->
+                try {
+                    val wifiManager = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                    multicastLock = wifiManager?.createMulticastLock("OwnVoiceBridgeDiscovery")
+                    multicastLock?.setReferenceCounted(true)
+                    multicastLock?.acquire()
+                } catch (e: Exception) {
+                    android.util.Log.w("BridgeClient", "Could not acquire MulticastLock: ${e.message}")
+                }
+            }
+
             socket = DatagramSocket()
             socket.broadcast = true
-            socket.soTimeout = 400
+            socket.soTimeout = 300
 
             val probeData = "DISCOVER_OWNVOICE_PC".toByteArray(Charsets.UTF_8)
-            val broadcastAddr = InetAddress.getByName("255.255.255.255")
-            val packet = DatagramPacket(probeData, probeData.size, broadcastAddr, discoveryPort)
-            socket.send(packet)
+            val targets = getBroadcastAddresses()
+
+            fun sendProbes() {
+                for (addr in targets) {
+                    try {
+                        val packet = DatagramPacket(probeData, probeData.size, addr, discoveryPort)
+                        socket.send(packet)
+                    } catch (e: Exception) {
+                        // ignore individual interface error
+                    }
+                }
+            }
+
+            sendProbes()
 
             val startTime = System.currentTimeMillis()
+            var lastProbeTime = startTime
             val buf = ByteArray(2048)
 
             while (System.currentTimeMillis() - startTime < timeoutMs) {
+                val now = System.currentTimeMillis()
+                if (found.isEmpty() && now - lastProbeTime > 400) {
+                    sendProbes()
+                    lastProbeTime = now
+                }
+
                 try {
                     val recvPacket = DatagramPacket(buf, buf.size)
                     socket.receive(recvPacket)
@@ -83,6 +143,11 @@ class BridgeClient(private val config: SecureConfig? = null) {
             android.util.Log.e("BridgeClient", "discoverLocalDesktops error", e)
         } finally {
             socket?.close()
+            try {
+                if (multicastLock?.isHeld == true) {
+                    multicastLock?.release()
+                }
+            } catch (e: Exception) {}
         }
         found
     }
@@ -152,7 +217,7 @@ class BridgeClient(private val config: SecureConfig? = null) {
         if (success) return@withContext true
 
         // Attempt 2: Dynamic IP Self-Healing
-        val discovered = discoverLocalDesktops(timeoutMs = 800)
+        val discovered = discoverLocalDesktops(timeoutMs = 1000)
         val matched = discovered.find { 
             (config?.desktopBridgeName?.isNotBlank() == true && it.name == config.desktopBridgeName) ||
             (effectiveToken.isNotBlank() && it.token == effectiveToken) ||

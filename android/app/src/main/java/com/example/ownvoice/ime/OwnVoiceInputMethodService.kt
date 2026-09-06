@@ -127,7 +127,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         audioRecorder = AudioRecordStreamer(16000)
         geminiClient = GeminiRestClient(app.secureConfig)
         snippetEngine = SnippetEngine(app.secureConfig)
-        bridgeClient = BridgeClient(app.secureConfig)
+        bridgeClient = BridgeClient(app.secureConfig, this)
         vibrator = getSystemService(Vibrator::class.java)
 
         // Observe amplitude flow for live waveform & Auto VAD
