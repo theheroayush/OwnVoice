@@ -75,10 +75,12 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     private var currentAmplitude by mutableStateOf(0.0f)
     private var currentEffectiveTone by mutableStateOf("smart_flow")
     private var lastInjectedLength = 0
+    private var lastInjectedText = ""
     private var isBridgeActive by mutableStateOf(false)
     private var isAutoVadActive by mutableStateOf(false)
     private var lastSpeechTime = 0L
     private var speechDetectedInSession = false
+    private var dismissJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -152,6 +154,10 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         statusMessage = statusMessage,
                         activeTone = currentEffectiveTone,
                         snippets = app.secureConfig.getSnippets(),
+                        lastInjectedText = lastInjectedText,
+                        isBridgeActive = isBridgeActive,
+                        isAutoVadActive = isAutoVadActive,
+                        desktopBridgeIp = app.secureConfig.desktopBridgeIp,
                         onToggleRecording = { 
                             try {
                                 toggleRecording()
@@ -183,6 +189,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                     ic?.deleteSurroundingText(2000, 500)
                                 }
                                 lastInjectedLength = 0
+                                lastInjectedText = ""
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onClearClick error", e)
@@ -196,16 +203,14 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 android.util.Log.e("OwnVoiceIME", "onNewLineClick error", e)
                             }
                         },
-                        isBridgeActive = isBridgeActive,
-                        isAutoVadActive = isAutoVadActive,
                         onToggleBridge = {
-                            val app = application as OwnVoiceApplication
-                            if (app.secureConfig.desktopBridgeIp.isBlank()) {
+                            val pcIp = app.secureConfig.desktopBridgeIp
+                            if (pcIp.isBlank()) {
                                 statusMessage = "Set PC IP in OwnVoice Settings"
                             } else {
                                 isBridgeActive = !isBridgeActive
                                 performHaptic()
-                                statusMessage = if (isBridgeActive) "PC Bridge ON: ${app.secureConfig.desktopBridgeIp}" else "PC Bridge OFF"
+                                statusMessage = if (isBridgeActive) "PC Bridge ON: $pcIp" else "PC Bridge OFF"
                             }
                         },
                         onToggleAutoVad = {
@@ -217,6 +222,8 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                             try {
                                 val expansion = snippetEngine.expand(trigger)
                                 currentInputConnection?.commitText(expansion, 1)
+                                lastInjectedText = expansion
+                                lastInjectedLength = expansion.length
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onSnippetClick error", e)
@@ -232,18 +239,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                             }
                         },
                         onEnterClick = {
-                            try {
-                                val ic = currentInputConnection
-                                val editorInfo = currentInputEditorInfo
-                                if (editorInfo != null && (editorInfo.imeOptions and EditorInfo.IME_MASK_ACTION) != EditorInfo.IME_ACTION_NONE) {
-                                    ic?.performEditorAction(editorInfo.imeOptions and EditorInfo.IME_MASK_ACTION)
-                                } else {
-                                    sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
-                                }
-                                performHaptic()
-                            } catch (e: Exception) {
-                                android.util.Log.e("OwnVoiceIME", "onEnterClick error", e)
-                            }
+                            sendAction()
                         },
                         onSpaceClick = {
                             try {
@@ -266,6 +262,31 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                             } catch (e: Exception) {
                                 val imm = getSystemService(InputMethodManager::class.java)
                                 imm?.showInputMethodPicker()
+                            }
+                        },
+                        onStateChange = { newState ->
+                            dismissJob?.cancel()
+                            keyboardState = newState
+                        },
+                        onShapeText = { transformType ->
+                            shapeInjectedText(transformType)
+                        },
+                        onRetryClick = {
+                            retryRecording()
+                        },
+                        onSendClick = {
+                            sendAction()
+                        },
+                        onTypeChar = { char ->
+                            try {
+                                currentInputConnection?.commitText(char, 1)
+                                performHaptic()
+                                if (keyboardState == KeyboardState.RESULT) {
+                                    dismissJob?.cancel()
+                                    keyboardState = KeyboardState.IDLE
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("OwnVoiceIME", "onTypeChar error", e)
                             }
                         }
                     )
@@ -297,13 +318,16 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
             app.secureConfig.dictationMode
         }
 
+        dismissJob?.cancel()
         keyboardState = KeyboardState.IDLE
         statusMessage = ""
         lastInjectedLength = 0
+        lastInjectedText = ""
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
         super.onFinishInputView(finishingInput)
+        dismissJob?.cancel()
         if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
         }
@@ -325,6 +349,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     }
 
     private fun startRecording() {
+        dismissJob?.cancel()
         val app = application as OwnVoiceApplication
         if (app.secureConfig.apiKey.isBlank()) {
             keyboardState = KeyboardState.ERROR
@@ -378,6 +403,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                     if (lastInjectedLength > 0) {
                         currentInputConnection?.deleteSurroundingText(lastInjectedLength, 0)
                         lastInjectedLength = 0
+                        lastInjectedText = ""
                     } else {
                         currentInputConnection?.deleteSurroundingText(1, 0)
                     }
@@ -391,6 +417,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                 } else if (rawTrimmed == "[COMMAND:CLEAR_ALL]" || normalizedCmd in listOf("clear all", "delete line", "clear line", "clear text")) {
                     currentInputConnection?.deleteSurroundingText(2000, 500)
                     lastInjectedLength = 0
+                    lastInjectedText = ""
                     performHaptic()
                     keyboardState = KeyboardState.IDLE
                     statusMessage = "Cleared text"
@@ -402,6 +429,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                     val expanded = snippetEngine.expand(text)
                     currentInputConnection?.commitText(expanded, 1)
                     lastInjectedLength = expanded.length
+                    lastInjectedText = expanded
 
                     if (isBridgeActive) {
                         val app = application as OwnVoiceApplication
@@ -414,8 +442,17 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                     }
 
                     performHaptic()
-                    keyboardState = KeyboardState.IDLE
+                    keyboardState = KeyboardState.RESULT
                     statusMessage = ""
+
+                    // Smooth auto-dismiss after 10s back to IDLE
+                    dismissJob?.cancel()
+                    dismissJob = serviceScope.launch {
+                        delay(10000)
+                        if (keyboardState == KeyboardState.RESULT) {
+                            keyboardState = KeyboardState.IDLE
+                        }
+                    }
                 } else {
                     keyboardState = KeyboardState.ERROR
                     statusMessage = "No words recognized (silence)"
@@ -428,6 +465,97 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                 delay(3500)
                 keyboardState = KeyboardState.IDLE
             }
+        }
+    }
+
+    private fun shapeInjectedText(transformType: String) {
+        if (lastInjectedText.isBlank()) return
+        performHaptic()
+        val textToShape = lastInjectedText
+        keyboardState = KeyboardState.PROCESSING
+        statusMessage = "Reshaping with Gemini…"
+
+        val instruction = when (transformType) {
+            "shorter" -> "Make this text concise, punchy, and direct while preserving all essential details."
+            "executive" -> "Rewrite this in an executive, crisp, professional business correspondence style."
+            "casual" -> "Rewrite this in a warm, friendly, natural conversational chat tone."
+            "translate" -> "Translate this text to Hindi (or to fluent English if it is already in Hindi)."
+            "fix" -> "Fix grammar, spelling, punctuation, and capitalization without altering words."
+            else -> "Improve clarity and flow."
+        }
+
+        serviceScope.launch {
+            try {
+                val (newText, _) = geminiClient.reshapeText(textToShape, instruction)
+                if (newText.isNotBlank()) {
+                    val ic = currentInputConnection
+                    if (lastInjectedLength > 0) {
+                        ic?.deleteSurroundingText(lastInjectedLength, 0)
+                    }
+                    ic?.commitText(newText, 1)
+                    lastInjectedText = newText
+                    lastInjectedLength = newText.length
+
+                    if (isBridgeActive) {
+                        val app = application as OwnVoiceApplication
+                        val pcIp = app.secureConfig.desktopBridgeIp
+                        if (pcIp.isNotBlank()) {
+                            serviceScope.launch {
+                                bridgeClient.sendToDesktop(pcIp, newText)
+                            }
+                        }
+                    }
+
+                    performHaptic()
+                    keyboardState = KeyboardState.RESULT
+                    statusMessage = "Reshaped ($transformType)"
+
+                    dismissJob?.cancel()
+                    dismissJob = serviceScope.launch {
+                        delay(10000)
+                        if (keyboardState == KeyboardState.RESULT) {
+                            keyboardState = KeyboardState.IDLE
+                        }
+                    }
+                } else {
+                    keyboardState = KeyboardState.RESULT
+                }
+            } catch (e: Exception) {
+                keyboardState = KeyboardState.ERROR
+                statusMessage = e.localizedMessage ?: "Reshape failed"
+                delay(2500)
+                keyboardState = KeyboardState.RESULT
+            }
+        }
+    }
+
+    private fun retryRecording() {
+        try {
+            if (lastInjectedLength > 0) {
+                currentInputConnection?.deleteSurroundingText(lastInjectedLength, 0)
+                lastInjectedLength = 0
+                lastInjectedText = ""
+            }
+            startRecording()
+        } catch (e: Exception) {
+            android.util.Log.e("OwnVoiceIME", "retryRecording error", e)
+        }
+    }
+
+    private fun sendAction() {
+        try {
+            val ic = currentInputConnection
+            val editorInfo = currentInputEditorInfo
+            if (editorInfo != null && (editorInfo.imeOptions and EditorInfo.IME_MASK_ACTION) != EditorInfo.IME_ACTION_NONE) {
+                ic?.performEditorAction(editorInfo.imeOptions and EditorInfo.IME_MASK_ACTION)
+            } else {
+                sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
+            }
+            performHaptic()
+            keyboardState = KeyboardState.IDLE
+            statusMessage = ""
+        } catch (e: Exception) {
+            android.util.Log.e("OwnVoiceIME", "sendAction error", e)
         }
     }
 
@@ -447,6 +575,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         if (instance == this) {
             instance = null
         }
+        dismissJob?.cancel()
         serviceScope.cancel()
         audioRecorder.cancelRecording()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
