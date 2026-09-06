@@ -3,12 +3,13 @@ import pystray
 from PIL import Image, ImageDraw
 
 class TrayIcon:
-    def __init__(self, on_open_settings, on_toggle_dictation, on_toggle_overlay, on_exit, config_manager=None):
+    def __init__(self, on_open_settings, on_toggle_dictation, on_toggle_overlay, on_exit, config_manager=None, on_open_phone_link=None):
         self.on_open_settings = on_open_settings
         self.on_toggle_dictation = on_toggle_dictation
         self.on_toggle_overlay = on_toggle_overlay
         self.on_exit = on_exit
         self.config = config_manager
+        self.on_open_phone_link = on_open_phone_link
         self.icon = None
 
     def _create_image(self):
@@ -33,6 +34,7 @@ class TrayIcon:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(lambda item: f"⚡ Toggle Dictation ({self.get_hotkey_label()})", lambda: self.on_toggle_dictation()),
             pystray.MenuItem("👁️ Show/Hide Pill", lambda: self.on_toggle_overlay(), default=True),
+            pystray.MenuItem("📱 Link Phone (QR Code)", lambda: self.on_open_phone_link() if self.on_open_phone_link else self.on_open_settings()),
             pystray.MenuItem("⚙️ Settings", lambda: self.on_open_settings()),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("❌ Exit", lambda: self.on_exit())

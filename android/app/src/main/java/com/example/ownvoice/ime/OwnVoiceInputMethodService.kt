@@ -67,7 +67,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     private lateinit var audioRecorder: AudioRecordStreamer
     private lateinit var geminiClient: GeminiRestClient
     private lateinit var snippetEngine: SnippetEngine
-    private val bridgeClient = BridgeClient()
+    private lateinit var bridgeClient: BridgeClient
     private var vibrator: Vibrator? = null
 
     private var keyboardState by mutableStateOf(KeyboardState.IDLE)
@@ -127,6 +127,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         audioRecorder = AudioRecordStreamer(16000)
         geminiClient = GeminiRestClient(app.secureConfig)
         snippetEngine = SnippetEngine(app.secureConfig)
+        bridgeClient = BridgeClient(app.secureConfig)
         vibrator = getSystemService(Vibrator::class.java)
 
         // Observe amplitude flow for live waveform & Auto VAD
@@ -243,11 +244,28 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         onToggleBridge = {
                             val pcIp = app.secureConfig.desktopBridgeIp
                             if (pcIp.isBlank()) {
-                                statusMessage = "Set PC IP in OwnVoice Settings"
+                                statusMessage = "Searching PC on Wi-Fi..."
+                                serviceScope.launch {
+                                    val found = bridgeClient.discoverLocalDesktops(timeoutMs = 1500)
+                                    if (found.isNotEmpty()) {
+                                        val first = found.first()
+                                        app.secureConfig.desktopBridgeIp = first.ip
+                                        app.secureConfig.desktopBridgeName = first.name
+                                        if (first.token.isNotBlank()) {
+                                            app.secureConfig.desktopBridgeToken = first.token
+                                        }
+                                        isBridgeActive = true
+                                        performHaptic()
+                                        statusMessage = "Paired: ${first.name}!"
+                                    } else {
+                                        statusMessage = "No PC found. Open OwnVoice to link."
+                                    }
+                                }
                             } else {
                                 isBridgeActive = !isBridgeActive
                                 performHaptic()
-                                statusMessage = if (isBridgeActive) "PC Bridge ON: $pcIp" else "PC Bridge OFF"
+                                val displayName = app.secureConfig.desktopBridgeName.ifBlank { pcIp }
+                                statusMessage = if (isBridgeActive) "PC Bridge ON: $displayName" else "PC Bridge OFF"
                             }
                         },
                         onToggleAutoVad = {
@@ -482,7 +500,11 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         val pcIp = app.secureConfig.desktopBridgeIp
                         if (pcIp.isNotBlank()) {
                             serviceScope.launch {
-                                bridgeClient.sendToDesktop(pcIp, expanded)
+                                bridgeClient.sendToDesktop(
+                                    desktopIp = pcIp,
+                                    text = expanded,
+                                    token = app.secureConfig.desktopBridgeToken
+                                )
                             }
                         }
                     }

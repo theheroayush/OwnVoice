@@ -11,8 +11,8 @@ android {
         applicationId = "com.ownvoice.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
-        versionName = "2.4.0"
+        versionCode = 11
+        versionName = "2.5.0"
     }
 
     signingConfigs {
@@ -83,6 +83,7 @@ dependencies {
   // Local tests: jUnit, coroutines, Android runner
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation("org.json:json:20240303")
 
   // Instrumented tests: jUnit rules and runners
   androidTestImplementation(libs.androidx.test.core)
@@ -98,5 +99,9 @@ dependencies {
   // Network & Icons
   implementation(libs.okhttp)
   implementation(libs.androidx.compose.material.icons)
+
+  // QR Code Scanning
+  implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+  implementation("com.google.zxing:core:3.5.3")
 }
 

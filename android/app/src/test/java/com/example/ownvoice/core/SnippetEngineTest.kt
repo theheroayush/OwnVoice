@@ -120,4 +120,43 @@ class SnippetEngineTest {
         assertEquals("https://cal.com/ayush", expandWithCarrier("give the meeting link"))
         assertEquals("https://cal.com/ayush", expandWithCarrier("please send the meeting link here"))
     }
+
+    @Test
+    fun testBridgeQrUriParsing() {
+        val uriStr = "ownvoice://pair?ip=192.168.1.15&port=8765&name=Ayush-Laptop&pin=849201&token=7f8b9a1c4d2e"
+        val parsed = java.net.URI(uriStr)
+        assertEquals("ownvoice", parsed.scheme)
+        assertEquals("pair", parsed.host)
+        val queryPairs = parsed.query.split("&").associate {
+            val parts = it.split("=")
+            parts[0] to parts.getOrElse(1) { "" }
+        }
+        assertEquals("192.168.1.15", queryPairs["ip"])
+        assertEquals("8765", queryPairs["port"])
+        assertEquals("Ayush-Laptop", queryPairs["name"])
+        assertEquals("849201", queryPairs["pin"])
+        assertEquals("7f8b9a1c4d2e", queryPairs["token"])
+    }
+
+    @Test
+    fun testBridgeDiscoveryPacketParsing() {
+        val jsonStr = """
+            {
+                "service": "ownvoice-bridge",
+                "version": "2.5.0",
+                "device_name": "Ayush-PC",
+                "ip": "192.168.1.50",
+                "port": 8765,
+                "pin": "123456",
+                "token": "abcdef123456"
+            }
+        """.trimIndent()
+        val json = org.json.JSONObject(jsonStr)
+        assertEquals("ownvoice-bridge", json.getString("service"))
+        assertEquals("Ayush-PC", json.getString("device_name"))
+        assertEquals("192.168.1.50", json.getString("ip"))
+        assertEquals(8765, json.getInt("port"))
+        assertEquals("123456", json.getString("pin"))
+        assertEquals("abcdef123456", json.getString("token"))
+    }
 }

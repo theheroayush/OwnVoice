@@ -22,6 +22,9 @@ class SecureConfig(context: Context) {
         private const val KEY_SELF_CORRECTION = "self_correction_enabled"
         private const val KEY_VOCABULARY_JSON = "vocabulary_json"
         private const val KEY_DESKTOP_BRIDGE_IP = "desktop_bridge_ip"
+        private const val KEY_DESKTOP_BRIDGE_NAME = "desktop_bridge_name"
+        private const val KEY_DESKTOP_BRIDGE_TOKEN = "desktop_bridge_token"
+        private const val KEY_DESKTOP_BRIDGE_PIN = "desktop_bridge_pin"
         private const val KEY_GIST_TOKEN = "gist_token"
         private const val KEY_GIST_ID = "gist_id"
     }
@@ -31,6 +34,18 @@ class SecureConfig(context: Context) {
     var desktopBridgeIp: String
         get() = prefs.getString(KEY_DESKTOP_BRIDGE_IP, "") ?: ""
         set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_IP, value.trim()).apply()
+
+    var desktopBridgeName: String
+        get() = prefs.getString(KEY_DESKTOP_BRIDGE_NAME, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_NAME, value.trim()).apply()
+
+    var desktopBridgeToken: String
+        get() = prefs.getString(KEY_DESKTOP_BRIDGE_TOKEN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_TOKEN, value.trim()).apply()
+
+    var desktopBridgePin: String
+        get() = prefs.getString(KEY_DESKTOP_BRIDGE_PIN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_PIN, value.trim()).apply()
 
     var gistToken: String
         get() = prefs.getString(KEY_GIST_TOKEN, "") ?: ""

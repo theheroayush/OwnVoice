@@ -108,7 +108,8 @@ class OwnVoiceApp:
             ai_engine=self.ai_engine,
             audio_recorder=self.audio_recorder,
             snippet_engine=self.snippet_engine,
-            on_settings_changed=self.reload_settings
+            on_settings_changed=self.reload_settings,
+            bridge_server=self.bridge_server
         )
 
         self.hotkey_manager = HotkeyManager(
@@ -122,7 +123,8 @@ class OwnVoiceApp:
             on_toggle_dictation=self.toggle_dictation,
             on_toggle_overlay=self.toggle_overlay,
             on_exit=self.exit_app,
-            config_manager=self.config
+            config_manager=self.config,
+            on_open_phone_link=self.open_phone_link
         )
 
     def reload_settings(self):
@@ -273,9 +275,14 @@ class OwnVoiceApp:
             if self.overlay.root:
                 self.overlay.root.after(0, self.overlay.show)
 
-    def open_settings(self):
+    def open_settings(self, tab=None):
         if self.overlay.root:
-            self.overlay.root.after(0, self.settings_ui.show)
+            self.overlay.root.after(0, lambda: self.settings_ui.show(initial_tab=tab))
+        elif self.settings_ui:
+            self.settings_ui.show(initial_tab=tab)
+
+    def open_phone_link(self):
+        self.open_settings(tab="📱 Phone Link")
 
     def exit_app(self):
         log_event("Exiting OwnVoice...")

@@ -68,6 +68,44 @@ fun SettingsScreen(
     var snippets by remember { mutableStateOf(app.secureConfig.getSnippets()) }
     var vocabulary by remember { mutableStateOf(app.secureConfig.getVocabulary()) }
     var bridgeIp by remember { mutableStateOf(app.secureConfig.desktopBridgeIp) }
+    var bridgeName by remember { mutableStateOf(app.secureConfig.desktopBridgeName) }
+    var isSearchingPC by remember { mutableStateOf(false) }
+    var discoveredPCs by remember { mutableStateOf(listOf<com.example.ownvoice.network.DiscoveredDesktop>()) }
+    var bridgeStatusMessage by remember { mutableStateOf("") }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var enteredPin by remember { mutableStateOf("") }
+    var targetPinIp by remember { mutableStateOf("") }
+    var showManualIp by remember { mutableStateOf(false) }
+    val bridgeClient = remember { com.example.ownvoice.network.BridgeClient(app.secureConfig) }
+
+    val qrScanLauncher = rememberLauncherForActivityResult(com.journeyapps.barcodescanner.ScanContract()) { result ->
+        if (result.contents != null) {
+            val uri = result.contents.trim()
+            if (uri.startsWith("ownvoice://pair")) {
+                try {
+                    val parsed = android.net.Uri.parse(uri)
+                    val ip = parsed.getQueryParameter("ip") ?: ""
+                    val name = parsed.getQueryParameter("name") ?: "Windows PC"
+                    val token = parsed.getQueryParameter("token") ?: ""
+                    val pin = parsed.getQueryParameter("pin") ?: ""
+                    if (ip.isNotBlank()) {
+                        bridgeIp = ip
+                        bridgeName = name
+                        app.secureConfig.desktopBridgeIp = ip
+                        app.secureConfig.desktopBridgeName = name
+                        if (token.isNotBlank()) app.secureConfig.desktopBridgeToken = token
+                        if (pin.isNotBlank()) app.secureConfig.desktopBridgePin = pin
+                        bridgeStatusMessage = "✅ Paired with $name ($ip)"
+                    }
+                } catch (e: Exception) {
+                    bridgeStatusMessage = "Error reading QR: ${e.message}"
+                }
+            } else {
+                bridgeStatusMessage = "Unrecognized QR code"
+            }
+        }
+    }
+
     var gistToken by remember { mutableStateOf(app.secureConfig.gistToken) }
     var gistId by remember { mutableStateOf(app.secureConfig.gistId) }
     var syncStatusMessage by remember { mutableStateOf("") }
@@ -548,9 +586,9 @@ fun SettingsScreen(
                 }
             }
 
-            // Section 5: Universal PC Dictation Bridge
+            // Section 5: Universal PC Dictation Bridge (Ecosystem Link)
             item {
-                Text("UNIVERSAL PC DICTATION BRIDGE", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textMuted)
+                Text("UNIVERSAL PC LINK (ECOSYSTEM BRIDGE)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = textMuted)
             }
 
             item {
@@ -562,22 +600,247 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("💻 Stream Speech to Windows PC", fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
-                            "Dictate using your phone and have text automatically appear at your cursor on your PC over local Wi-Fi.",
+                            "Speak on your phone and have text appear directly at your PC cursor over local Wi-Fi with zero typing.",
                             fontSize = 12.sp,
                             color = textMuted,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = bridgeIp,
-                            onValueChange = {
-                                bridgeIp = it
-                                app.secureConfig.desktopBridgeIp = it
-                            },
-                            label = { Text("PC Wi-Fi IP (e.g. 192.168.1.15)") },
-                            singleLine = true,
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Paired Device Status Card
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFF25252E),
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (bridgeIp.isNotBlank()) accentGreen else Color(0xFFFF9500),
+                                            modifier = Modifier.size(8.dp)
+                                        ) {}
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (bridgeIp.isNotBlank()) "Paired: ${bridgeName.ifBlank { "Windows PC" }}" else "No PC Paired",
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            fontSize = 13.sp
+                                        )
+                                    }
+                                    if (bridgeIp.isNotBlank()) {
+                                        Text("Host: $bridgeIp:8765", fontSize = 11.sp, color = textMuted)
+                                    } else {
+                                        Text("Use 1-Tap Auto-Discover or QR Code below", fontSize = 11.sp, color = textMuted)
+                                    }
+                                }
+
+                                if (bridgeIp.isNotBlank()) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Button(
+                                            onClick = {
+                                                scope.launch {
+                                                    bridgeStatusMessage = "Testing connection..."
+                                                    val alive = bridgeClient.checkStatus(bridgeIp)
+                                                    bridgeStatusMessage = if (alive) "✅ PC Connected & Ready!" else "❌ PC unreachable. Ensure app is running."
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF33333F)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text("Test", fontSize = 11.sp, color = Color.White)
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                bridgeIp = ""
+                                                bridgeName = ""
+                                                app.secureConfig.desktopBridgeIp = ""
+                                                app.secureConfig.desktopBridgeName = ""
+                                                app.secureConfig.desktopBridgeToken = ""
+                                                app.secureConfig.desktopBridgePin = ""
+                                                bridgeStatusMessage = "Unpaired"
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF442222)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text("Unpair", fontSize = 11.sp, color = accentRed)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (bridgeStatusMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(bridgeStatusMessage, fontSize = 12.sp, color = accentBlue, fontWeight = FontWeight.Medium)
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // 3 Zero-Friction Connection Options
+                        Text("PAIRING OPTIONS (ZERO MANUAL TYPING):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = textMuted)
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // 1-Tap Auto-Discover
+                            Button(
+                                onClick = {
+                                    isSearchingPC = true
+                                    bridgeStatusMessage = "Searching local Wi-Fi for OwnVoice PC..."
+                                    discoveredPCs = emptyList()
+                                    scope.launch {
+                                        val found = bridgeClient.discoverLocalDesktops(timeoutMs = 1500)
+                                        discoveredPCs = found
+                                        isSearchingPC = false
+                                        if (found.isEmpty()) {
+                                            bridgeStatusMessage = "No PC found. Ensure OwnVoice is running on PC."
+                                        } else if (found.size == 1) {
+                                            val pc = found.first()
+                                            bridgeIp = pc.ip
+                                            bridgeName = pc.name
+                                            app.secureConfig.desktopBridgeIp = pc.ip
+                                            app.secureConfig.desktopBridgeName = pc.name
+                                            if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
+                                            if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
+                                            bridgeStatusMessage = "⚡ Auto-Paired with ${pc.name} (${pc.ip})!"
+                                        } else {
+                                            bridgeStatusMessage = "Found ${found.size} PCs on Wi-Fi. Tap below to pair."
+                                        }
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = accentBlue),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1.3f)
+                            ) {
+                                Text(
+                                    if (isSearchingPC) "⏳ Searching…" else "⚡ 1-Tap Auto-Discover",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+
+                            // Scan QR Code
+                            Button(
+                                onClick = {
+                                    try {
+                                        qrScanLauncher.launch(
+                                            com.journeyapps.barcodescanner.ScanOptions()
+                                                .setPrompt("Point camera at OwnVoice Desktop QR Code")
+                                                .setBeepEnabled(true)
+                                                .setOrientationLocked(false)
+                                        )
+                                    } catch (e: Exception) {
+                                        bridgeStatusMessage = "Camera scanner error: ${e.message}"
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C35)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("📷 Scan QR", fontSize = 11.sp, color = Color.White)
+                            }
+
+                            // 6-Digit PIN
+                            Button(
+                                onClick = {
+                                    enteredPin = ""
+                                    targetPinIp = bridgeIp
+                                    showPinDialog = true
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C35)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(0.9f)
+                            ) {
+                                Text("🔢 PIN", fontSize = 11.sp, color = Color.White)
+                            }
+                        }
+
+                        // Discovered PCs list (if multiple found or user tapped discover)
+                        if (discoveredPCs.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                discoveredPCs.forEach { pc ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF1E293B),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column {
+                                                Text("💻 ${pc.name}", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 13.sp)
+                                                Text("IP: ${pc.ip}:${pc.port}", color = textMuted, fontSize = 11.sp)
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    bridgeIp = pc.ip
+                                                    bridgeName = pc.name
+                                                    app.secureConfig.desktopBridgeIp = pc.ip
+                                                    app.secureConfig.desktopBridgeName = pc.name
+                                                    if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
+                                                    if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
+                                                    bridgeStatusMessage = "⚡ Paired with ${pc.name}!"
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = accentGreen),
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text("Pair", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Collapsible Advanced Manual IP
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showManualIp = !showManualIp }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                if (showManualIp) "▲ Hide Manual IP Override" else "▼ Advanced: Manual IP Setup",
+                                fontSize = 11.sp,
+                                color = textMuted
+                            )
+                        }
+
+                        if (showManualIp) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = bridgeIp,
+                                onValueChange = {
+                                    bridgeIp = it
+                                    app.secureConfig.desktopBridgeIp = it
+                                },
+                                label = { Text("PC Wi-Fi IP (e.g. 192.168.1.15)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }
@@ -917,6 +1180,84 @@ fun SettingsScreen(
                         newVocabTerm = ""
                     }
                 ) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = cardBg
+        )
+    }
+
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false },
+            title = { Text("Enter 6-Digit PIN", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        "Enter the 6-digit PIN displayed on your PC in the 'Phone Link' tab:",
+                        color = textMuted,
+                        fontSize = 12.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = enteredPin,
+                        onValueChange = { if (it.length <= 6) enteredPin = it.filter { char -> char.isDigit() } },
+                        label = { Text("6-Digit PIN (e.g. 849201)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (bridgeIp.isBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = targetPinIp,
+                            onValueChange = { targetPinIp = it.trim() },
+                            label = { Text("PC IP Address (optional if auto-detected)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (enteredPin.length == 6) {
+                            scope.launch {
+                                bridgeStatusMessage = "Verifying PIN with PC..."
+                                var targetIp = targetPinIp.ifBlank { bridgeIp }
+                                if (targetIp.isBlank()) {
+                                    val found = bridgeClient.discoverLocalDesktops(timeoutMs = 1200)
+                                    if (found.isNotEmpty()) {
+                                        targetIp = found.first().ip
+                                    }
+                                }
+                                if (targetIp.isNotBlank()) {
+                                    val res = bridgeClient.pairWithPin(targetIp, enteredPin)
+                                    if (res.success) {
+                                        bridgeIp = targetIp
+                                        bridgeName = res.deviceName
+                                        app.secureConfig.desktopBridgeIp = targetIp
+                                        app.secureConfig.desktopBridgeName = res.deviceName
+                                        app.secureConfig.desktopBridgeToken = res.token
+                                        app.secureConfig.desktopBridgePin = enteredPin
+                                        bridgeStatusMessage = "✅ Paired with ${res.deviceName}!"
+                                        showPinDialog = false
+                                    } else {
+                                        bridgeStatusMessage = "❌ PIN verification failed: ${res.error}"
+                                    }
+                                } else {
+                                    bridgeStatusMessage = "❌ PC not found. Enter IP above or ensure PC is on."
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = accentBlue)
+                ) {
+                    Text("Pair")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinDialog = false }) {
                     Text("Cancel")
                 }
             },

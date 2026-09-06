@@ -7,12 +7,13 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class SettingsWindow:
-    def __init__(self, config_manager, ai_engine, audio_recorder=None, snippet_engine=None, on_settings_changed=None):
+    def __init__(self, config_manager, ai_engine, audio_recorder=None, snippet_engine=None, on_settings_changed=None, bridge_server=None):
         self.config = config_manager
         self.ai_engine = ai_engine
         self.audio_recorder = audio_recorder
         self.snippet_engine = snippet_engine
         self.on_settings_changed = on_settings_changed
+        self.bridge_server = bridge_server
         self.window = None
         self.is_open = False
         self.test_stream = None
@@ -21,31 +22,42 @@ class SettingsWindow:
         self.dev_map = {}
         self.test_key_btn = None
         self.key_status_label = None
+        self.qr_label = None
+        self.pin_label = None
 
-    def show(self):
+    def show(self, initial_tab=None):
         if self.is_open and self.window:
             self.window.lift()
             self.window.focus_force()
+            if initial_tab and hasattr(self, "tabview") and self.tabview:
+                try:
+                    self.tabview.set(initial_tab)
+                except Exception:
+                    pass
             return
 
         self.is_open = True
         self.window = ctk.CTkToplevel()
         self.window.title("OwnVoice — Settings & Audio Devices")
-        self.window.geometry("760x580")
-        self.window.minsize(700, 520)
+        self.window.geometry("780x600")
+        self.window.minsize(720, 540)
         self.window.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self.window.grid_columnconfigure(0, weight=1)
         self.window.grid_rowconfigure(0, weight=1)
 
         tabview = ctk.CTkTabview(self.window)
+        self.tabview = tabview
         tabview.grid(row=0, column=0, padx=20, pady=20, sticky="nsew")
 
         tab_general = tabview.add("⚡ General & Audio")
+        tab_link = tabview.add("📱 Phone Link")
         tab_snippets = tabview.add("✂️ Voice Snippets")
         tab_vocab = tabview.add("🧠 Personal Vocabulary")
         tab_ai = tabview.add("🔑 Gemini AI Engine")
         tab_history = tabview.add("📜 History")
+
+        self._setup_phone_link_tab(tab_link)
 
         # ----------------- Tab 1: General -----------------
         ctk.CTkLabel(tab_general, text="Microphone Input Device (Safe Verified Devices):", font=ctk.CTkFont(weight="bold", size=13)).pack(anchor="w", padx=15, pady=(10, 4))
@@ -513,3 +525,100 @@ class SettingsWindow:
             except Exception:
                 pass
             self.window = None
+
+    def _setup_phone_link_tab(self, tab_link):
+        ctk.CTkLabel(tab_link, text="📱 Universal Phone Link (Ecosystem Bridge)", font=ctk.CTkFont(weight="bold", size=15)).pack(anchor="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(
+            tab_link,
+            text="Turn your Android phone into a wireless microphone that types directly into your PC cursor over local Wi-Fi.",
+            text_color="gray",
+            font=ctk.CTkFont(size=11)
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+
+        status_frame = ctk.CTkFrame(tab_link, fg_color="#1E293B", corner_radius=8)
+        status_frame.pack(fill="x", padx=15, pady=(0, 12))
+
+        local_ip = self.bridge_server.local_ip if self.bridge_server else "127.0.0.1"
+        port = self.bridge_server.port if self.bridge_server else 8765
+
+        ctk.CTkLabel(
+            status_frame,
+            text=f"🟢 Local Wi-Fi Discovery Active • Server: {local_ip}:{port} • Auto-Discovery: UDP 8766",
+            font=ctk.CTkFont(weight="bold", size=12),
+            text_color="#10B981"
+        ).pack(side="left", padx=12, pady=8)
+
+        content_card = ctk.CTkFrame(tab_link, fg_color="#0F172A", corner_radius=10)
+        content_card.pack(fill="both", expand=True, padx=15, pady=(0, 10))
+
+        left_col = ctk.CTkFrame(content_card, fg_color="transparent")
+        left_col.pack(side="left", padx=20, pady=15, fill="y")
+
+        self.qr_label = ctk.CTkLabel(left_col, text="")
+        self.qr_label.pack(pady=(0, 8))
+
+        ctk.CTkLabel(left_col, text="📷 Scan with OwnVoice Camera", font=ctk.CTkFont(size=11), text_color="#94A3B8").pack()
+
+        right_col = ctk.CTkFrame(content_card, fg_color="transparent")
+        right_col.pack(side="left", fill="both", expand=True, padx=(10, 20), pady=15)
+
+        ctk.CTkLabel(right_col, text="3 Zero-Friction Ways to Connect:", font=ctk.CTkFont(weight="bold", size=13), text_color="#38BDF8").pack(anchor="w", pady=(0, 8))
+
+        # Option 1: 1-Tap Auto-Discover
+        opt1 = ctk.CTkFrame(right_col, fg_color="#1E293B", corner_radius=6)
+        opt1.pack(fill="x", pady=4)
+        ctk.CTkLabel(opt1, text="⚡ Option 1: 1-Tap Auto-Discover (Recommended)", font=ctk.CTkFont(weight="bold", size=11), text_color="#34D399").pack(anchor="w", padx=10, pady=(6, 2))
+        ctk.CTkLabel(opt1, text="If phone & PC are on the same Wi-Fi, open OwnVoice on phone and tap '1-Tap Auto-Discover'. Connected in <1 second with zero typing!", font=ctk.CTkFont(size=10), text_color="#CBD5E1", wraplength=340, justify="left").pack(anchor="w", padx=10, pady=(0, 6))
+
+        # Option 2: QR Code
+        opt2 = ctk.CTkFrame(right_col, fg_color="#1E293B", corner_radius=6)
+        opt2.pack(fill="x", pady=4)
+        ctk.CTkLabel(opt2, text="📷 Option 2: Scan QR Code (WhatsApp Web style)", font=ctk.CTkFont(weight="bold", size=11), text_color="#38BDF8").pack(anchor="w", padx=10, pady=(6, 2))
+        ctk.CTkLabel(opt2, text="In OwnVoice on phone, tap 'Scan QR Code' and point camera at the code on the left.", font=ctk.CTkFont(size=10), text_color="#CBD5E1", wraplength=340, justify="left").pack(anchor="w", padx=10, pady=(0, 6))
+
+        # Option 3: 6-Digit PIN
+        opt3 = ctk.CTkFrame(right_col, fg_color="#1E293B", corner_radius=6)
+        opt3.pack(fill="x", pady=4)
+        ctk.CTkLabel(opt3, text="🔢 Option 3: Enter 6-Digit PIN", font=ctk.CTkFont(weight="bold", size=11), text_color="#FBBF24").pack(anchor="w", padx=10, pady=(6, 2))
+
+        pin_row = ctk.CTkFrame(opt3, fg_color="transparent")
+        pin_row.pack(anchor="w", padx=10, pady=(2, 6))
+
+        pin_val = self.bridge_server.current_pin if self.bridge_server else "000000"
+        self.pin_label = ctk.CTkLabel(
+            pin_row,
+            text=f"  {pin_val[:3]} {pin_val[3:]}  ",
+            font=ctk.CTkFont(family="Consolas", size=18, weight="bold"),
+            fg_color="#0F172A",
+            text_color="#FBBF24",
+            corner_radius=6
+        )
+        self.pin_label.pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            pin_row,
+            text="🔄 New PIN",
+            width=80,
+            height=28,
+            command=self._regenerate_bridge_pin,
+            fg_color="#334155",
+            hover_color="#475569"
+        ).pack(side="left")
+
+        self._refresh_qr_image()
+
+    def _regenerate_bridge_pin(self):
+        if self.bridge_server:
+            new_pin = self.bridge_server.regenerate_pin()
+            if self.pin_label:
+                self.pin_label.configure(text=f"  {new_pin[:3]} {new_pin[3:]}  ")
+            self._refresh_qr_image()
+
+    def _refresh_qr_image(self):
+        if self.bridge_server and self.qr_label:
+            try:
+                pil_img = self.bridge_server.generate_qr_image(size=180)
+                ctk_img = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(180, 180))
+                self.qr_label.configure(image=ctk_img)
+            except Exception as e:
+                print(f"[SettingsWindow] QR render error: {e}")
