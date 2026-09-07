@@ -431,10 +431,11 @@ fun SettingsScreen(
                                                 scope.launch {
                                                     bridgeStatusMessage = "Testing connection to $bridgeIp:8765..."
                                                     val alive = bridgeClient.checkStatus(bridgeIp)
+                                                    val err = if (bridgeClient.lastError.isNotBlank()) " (${bridgeClient.lastError})" else ""
                                                     bridgeStatusMessage = if (alive) {
                                                         "✅ PC Connected & Ready ($bridgeIp:8765)!"
                                                     } else {
-                                                        "❌ Unreachable at $bridgeIp:8765. Check app is running on PC & both are on same Wi-Fi."
+                                                        "❌ Unreachable at $bridgeIp:8765$err. Check app is running on PC & both are on same Wi-Fi."
                                                     }
                                                 }
                                             },
@@ -635,7 +636,8 @@ fun SettingsScreen(
                                                                         if (ok) {
                                                                             pcDictateFeedback = "✅ Typed to PC: \"$expanded\""
                                                                         } else {
-                                                                            pcDictateFeedback = "❌ PC didn't respond at $targetIp:8765. Verify OwnVoice is running on PC."
+                                                                            val err = if (bridgeClient.lastError.isNotBlank()) " (${bridgeClient.lastError})" else ""
+                                                                            pcDictateFeedback = "❌ PC didn't respond at $targetIp:8765$err. Verify OwnVoice is running on PC."
                                                                         }
                                                                     }
                                                                 } else {
@@ -783,7 +785,7 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     enteredPin = ""
-                                    targetPinIp = bridgeIp
+                                    targetPinIp = bridgeIp.ifBlank { "192.168.29.53" }
                                     showPinDialog = true
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C35)),
@@ -1541,7 +1543,8 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = targetPinIp,
                             onValueChange = { targetPinIp = it.trim() },
-                            label = { Text("PC IP Address (optional if auto-detected)") },
+                            label = { Text("PC IP Address (e.g. 192.168.29.53)") },
+                            placeholder = { Text("192.168.29.53") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )

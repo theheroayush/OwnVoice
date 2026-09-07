@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import com.example.ownvoice.core.SecureConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -12,8 +15,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
 data class DiscoveredDesktop(
@@ -37,6 +42,9 @@ class BridgeClient(
     private val config: SecureConfig? = null,
     private val context: Context? = null
 ) {
+
+    @Volatile
+    var lastError: String = ""
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -67,10 +75,83 @@ class BridgeClient(
         return broadcastList.toList()
     }
 
+    private fun getLocalIps(): List<String> {
+        val list = mutableListOf<String>()
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                val ni = interfaces.nextElement()
+                if (ni.isLoopback || !ni.isUp) continue
+                for (ia in ni.interfaceAddresses) {
+                    val addr = ia.address
+                    if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                        val host = addr.hostAddress ?: ""
+                        if (host.isNotBlank()) list.add(host)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
     /**
-     * Broadcasts a UDP probe on local Wi-Fi port 8766 to discover active OwnVoice desktop instances.
-     * Broadcasts to both subnet-directed broadcast addresses and 255.255.255.255.
-     * Acquires WifiManager.MulticastLock when context is available.
+     * High-speed concurrent TCP subnet sweep.
+     * Essential for hotel Wi-Fi, university networks, and corporate access points that
+     * block UDP broadcast and multicast packets between clients.
+     */
+    suspend fun scanSubnetForPCs(port: Int = 8765): List<DiscoveredDesktop> = withContext(Dispatchers.IO) {
+        val localIps = getLocalIps()
+        val foundList = CopyOnWriteArrayList<DiscoveredDesktop>()
+        val fastClient = OkHttpClient.Builder()
+            .connectTimeout(350, TimeUnit.MILLISECONDS)
+            .readTimeout(600, TimeUnit.MILLISECONDS)
+            .build()
+
+        coroutineScope {
+            for (localIp in localIps) {
+                val prefix = localIp.substringBeforeLast(".") + "."
+                (1..254).map { i ->
+                    async {
+                        val targetIp = "$prefix$i"
+                        try {
+                            val req = Request.Builder().url("http://$targetIp:$port/status").get().build()
+                            fastClient.newCall(req).execute().use { resp ->
+                                if (resp.isSuccessful) {
+                                    val body = resp.body?.string() ?: ""
+                                    val json = JSONObject(body)
+                                    if (json.optString("service") == "ownvoice-bridge" || json.optString("status") == "ready") {
+                                        val desktop = DiscoveredDesktop(
+                                            name = json.optString("device_name", "Windows PC"),
+                                            ip = targetIp,
+                                            port = json.optInt("port", port),
+                                            pin = json.optString("pin", ""),
+                                            token = json.optString("token", ""),
+                                            apiKey = json.optString("api_key", "")
+                                        )
+                                        if (desktop.apiKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                                            config?.apiKey = desktop.apiKey
+                                        }
+                                        if (foundList.none { it.ip == desktop.ip }) {
+                                            foundList.add(desktop)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // Non-responsive host on subnet
+                        }
+                    }
+                }
+            }
+        }
+        foundList.toList()
+    }
+
+    /**
+     * Dual-Engine Discovery:
+     * 1. Broadcasts a UDP probe on local Wi-Fi port 8766.
+     * 2. If UDP broadcast fails or is blocked by router AP isolation (common in hotels),
+     *    automatically executes an ultra-fast concurrent TCP subnet sweep.
      */
     suspend fun discoverLocalDesktops(timeoutMs: Int = 1800, discoveryPort: Int = 8766): List<DiscoveredDesktop> = withContext(Dispatchers.IO) {
         val found = mutableListOf<DiscoveredDesktop>()
@@ -91,7 +172,7 @@ class BridgeClient(
 
             socket = DatagramSocket()
             socket.broadcast = true
-            socket.soTimeout = 300
+            socket.soTimeout = 250
 
             val probeData = "DISCOVER_OWNVOICE_PC".toByteArray(Charsets.UTF_8)
             val targets = getBroadcastAddresses()
@@ -113,9 +194,11 @@ class BridgeClient(
             var lastProbeTime = startTime
             val buf = ByteArray(2048)
 
-            while (System.currentTimeMillis() - startTime < timeoutMs) {
+            // Listen for UDP responses up to min(1000ms, timeoutMs)
+            val udpWaitMs = minOf(timeoutMs, 1000)
+            while (System.currentTimeMillis() - startTime < udpWaitMs) {
                 val now = System.currentTimeMillis()
-                if (found.isEmpty() && now - lastProbeTime > 400) {
+                if (found.isEmpty() && now - lastProbeTime > 300) {
                     sendProbes()
                     lastProbeTime = now
                 }
@@ -143,11 +226,11 @@ class BridgeClient(
                         }
                     }
                 } catch (e: Exception) {
-                    // Socket timeout or parse error, continue until loop timeout
+                    // Socket timeout or parse error
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("BridgeClient", "discoverLocalDesktops error", e)
+            android.util.Log.e("BridgeClient", "discoverLocalDesktops UDP error", e)
         } finally {
             socket?.close()
             try {
@@ -156,6 +239,17 @@ class BridgeClient(
                 }
             } catch (e: Exception) {}
         }
+
+        // Secondary fallback: High-speed TCP Subnet Sweep if UDP broadcast was blocked
+        if (found.isEmpty()) {
+            val subnetPCs = scanSubnetForPCs(discoveryPort - 1)
+            for (pc in subnetPCs) {
+                if (found.none { it.ip == pc.ip }) {
+                    found.add(pc)
+                }
+            }
+        }
+
         found
     }
 
@@ -164,7 +258,8 @@ class BridgeClient(
      */
     suspend fun pairWithPin(desktopIp: String, pin: String, port: Int = 8765): PairResult = withContext(Dispatchers.IO) {
         if (desktopIp.isBlank() || pin.isBlank()) {
-            return@withContext PairResult(false, error = "IP and PIN cannot be empty")
+            lastError = "IP and PIN cannot be empty"
+            return@withContext PairResult(false, error = lastError)
         }
         val host = if (!desktopIp.contains(":")) "$desktopIp:$port" else desktopIp
         val url = "http://$host/pair"
@@ -187,12 +282,15 @@ class BridgeClient(
                 if (apiKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
                     config?.apiKey = apiKey
                 }
+                lastError = ""
                 PairResult(true, deviceName = name, token = token, apiKey = apiKey)
             } else {
-                PairResult(false, error = respJson.optString("error", "Pairing failed (HTTP ${resp.code})"))
+                lastError = respJson.optString("error", "Pairing failed (HTTP ${resp.code})")
+                PairResult(false, error = lastError)
             }
         } catch (e: Exception) {
-            PairResult(false, error = e.localizedMessage ?: "Connection error")
+            lastError = e.localizedMessage ?: "Connection error"
+            PairResult(false, error = lastError)
         }
     }
 
@@ -200,7 +298,10 @@ class BridgeClient(
      * Checks if the desktop bridge is alive and reachable.
      */
     suspend fun checkStatus(desktopIp: String, port: Int = 8765): Boolean = withContext(Dispatchers.IO) {
-        if (desktopIp.isBlank()) return@withContext false
+        if (desktopIp.isBlank()) {
+            lastError = "Desktop IP is blank"
+            return@withContext false
+        }
         val host = if (!desktopIp.contains(":")) "$desktopIp:$port" else desktopIp
         val url = "http://$host/status"
         val request = Request.Builder().url(url).get().build()
@@ -217,11 +318,14 @@ class BridgeClient(
                 if (returnedToken.isNotBlank() && config?.desktopBridgeToken.isNullOrBlank()) {
                     config?.desktopBridgeToken = returnedToken
                 }
+                lastError = ""
                 true
             } else {
+                lastError = "Server responded with HTTP ${resp.code}"
                 false
             }
         } catch (e: Exception) {
+            lastError = e.localizedMessage ?: "Connection error"
             false
         }
     }
@@ -229,7 +333,7 @@ class BridgeClient(
     /**
      * Injects text directly into the PC cursor.
      * Includes dynamic IP self-healing: if the configured IP fails, it attempts a quick
-     * UDP auto-discovery probe to re-locate the PC and retries automatically.
+     * UDP auto-discovery probe and TCP subnet sweep to re-locate the PC and retries automatically.
      */
     suspend fun sendToDesktop(desktopIp: String, text: String, port: Int = 8765, token: String = ""): Boolean = withContext(Dispatchers.IO) {
         if (text.isBlank()) return@withContext false
@@ -243,8 +347,8 @@ class BridgeClient(
             if (success) return@withContext true
         }
 
-        // Attempt 2: Dynamic IP Self-Healing & Instant Auto-Discovery
-        val discovered = discoverLocalDesktops(timeoutMs = 1500)
+        // Attempt 2: Dynamic IP Self-Healing & Instant Dual-Engine Discovery
+        val discovered = discoverLocalDesktops(timeoutMs = 1200)
         val matched = discovered.find { 
             (config?.desktopBridgeName?.isNotBlank() == true && it.name == config.desktopBridgeName) ||
             (effectiveToken.isNotBlank() && it.token == effectiveToken) ||
@@ -292,8 +396,17 @@ class BridgeClient(
 
         return try {
             val resp = client.newCall(request).execute()
-            resp.isSuccessful
+            val ok = resp.isSuccessful
+            if (!ok) {
+                lastError = "Server HTTP ${resp.code}"
+                android.util.Log.e("BridgeClient", "doInject failed: HTTP ${resp.code}")
+            } else {
+                lastError = ""
+            }
+            ok
         } catch (e: Exception) {
+            lastError = e.localizedMessage ?: "Connection error"
+            android.util.Log.e("BridgeClient", "doInject exception: $lastError", e)
             false
         }
     }
