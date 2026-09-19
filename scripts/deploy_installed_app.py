@@ -88,9 +88,14 @@ def deploy():
     target_exe = TARGET_DIR / "OwnVoice.exe"
     if target_exe.exists():
         print(f"[Deploy] Verified {target_exe} ({target_exe.stat().st_size} bytes)")
-        print("[Deploy] Starting application in background...")
-        subprocess.Popen([str(target_exe)], cwd=str(TARGET_DIR))
-        print("[Deploy] OwnVoice launched.")
+        # Launch independent process via WMI so it survives console/script exit
+        try:
+            cmd = f'powershell -Command "Invoke-WmiMethod -Class Win32_Process -Name Create -ArgumentList \'{target_exe}\'"'
+            subprocess.run(cmd, shell=True, check=True)
+            print("[Deploy] OwnVoice launched successfully via WMI.")
+        except Exception as e:
+            print(f"[Deploy] WMI launch notice: {e}, falling back to Popen...")
+            subprocess.Popen([str(target_exe)], cwd=str(TARGET_DIR))
     else:
         print(f"[Deploy] Error: {target_exe} not found!")
         sys.exit(1)

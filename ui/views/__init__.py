@@ -8,10 +8,12 @@ from ui.views.snippets_view import SnippetsView
 from ui.views.style_view import StyleView
 from ui.views.phone_view import PhoneView
 from ui.views.settings_view import SettingsView
+from ui.views.productivity_view import ProductivityView
 
 __all__ = [
     "HomeView",
     "HistoryView",
+    "ProductivityView",
     "VocabularyView",
     "SnippetsView",
     "StyleView",

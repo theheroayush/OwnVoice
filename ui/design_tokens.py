@@ -50,16 +50,28 @@ BADGE_COLORS = {
     "Company": {"bg": "#78350F", "fg": "#FCD34D"},
     "Jargon": {"bg": "#701A75", "fg": "#F5D0FE"},
     "Meeting": {"bg": "#3730A3", "fg": "#C7D2FE"},
-    "Email": {"bg": "#1E293B", "fg": "#94A3B8"},
+    "Email": {"bg": "#2E1A47", "fg": "#D8B4FE"},
     "Work": {"bg": "#1E3A8A", "fg": "#93C5FD"},
     "Personal": {"bg": "#334155", "fg": "#CBD5E1"},
     "Link": {"bg": "#1E293B", "fg": "#60A5FA"},
     "Contact": {"bg": "#064E3B", "fg": "#34D399"},
-    "Code": {"bg": "#1E1E2E", "fg": "#93C5FD"},
+    "Code": {"bg": "#0F2942", "fg": "#38BDF8"},
     "Text": {"bg": "#312E81", "fg": "#C7D2FE"},
     "Notes": {"bg": "#3730A3", "fg": "#C7D2FE"},
     "Others": {"bg": "#1E293B", "fg": "#94A3B8"},
+    "Whatsapp": {"bg": "#064E3B", "fg": "#34D399"},
+    "Notion": {"bg": "#1F2937", "fg": "#E5E7EB"},
+    "Vs code": {"bg": "#0F2942", "fg": "#38BDF8"},
+    "Chrome": {"bg": "#3B2805", "fg": "#FBBF24"},
+    "Chatgpt": {"bg": "#064E3B", "fg": "#6EE7B7"},
+    "Teams": {"bg": "#312E81", "fg": "#C7D2FE"},
 }
+
+# Chart Tokens
+CHART_BAR_DEFAULT = "#4F46E5"
+CHART_BAR_HOVER = "#6366F1"
+CHART_BAR_ACTIVE = "#818CF8"
+CHART_TOOLTIP_BG = "#1E2038"
 
 def get_badge_colors(category_or_type: str):
     key = str(category_or_type).strip().capitalize()

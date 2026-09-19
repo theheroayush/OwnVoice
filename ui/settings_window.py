@@ -20,6 +20,7 @@ from ui.views.snippets_view import SnippetsView
 from ui.views.style_view import StyleView
 from ui.views.phone_view import PhoneView
 from ui.views.settings_view import SettingsView
+from ui.views.productivity_view import ProductivityView
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -67,8 +68,10 @@ class SettingsWindow:
             return "Aa Style"
         elif "setting" in t or "general" in t or "audio" in t or "gemini" in t or "ai engine" in t:
             return "⚙️ Settings"
-        elif "hist" in t:
+        elif "hist" in t or "dictat" in t:
             return "🕒 History"
+        elif "productiv" in t or "progress" in t or "stat" in t:
+            return "📊 Productivity"
         elif "home" in t:
             return "🏠 Home"
         return "🏠 Home"
@@ -145,6 +148,7 @@ class SettingsWindow:
         nav_items = [
             ("🏠 Home", None),
             ("🕒 History", None),
+            ("📊 Productivity", None),
             ("YOUR VOICE", "header"),
             ("📖 Vocabulary", None),
             ("⚡ Snippets", None),
@@ -257,6 +261,13 @@ class SettingsWindow:
         )
 
         self.views["🕒 History"] = HistoryView(
+            parent=self.view_host,
+            hub=self,
+            config_manager=self.config,
+            note_store=self.note_store
+        )
+
+        self.views["📊 Productivity"] = ProductivityView(
             parent=self.view_host,
             hub=self,
             config_manager=self.config,

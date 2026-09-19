@@ -58,12 +58,12 @@ class TestDesktopHubUI(unittest.TestCase):
             self.hub._on_close()
 
     def test_hub_open_and_view_initialization(self):
-        """Verify hub initializes all 7 modular views on show()."""
+        """Verify hub initializes all 8 modular views on show()."""
         self.hub.show()
         self.assertTrue(self.hub.is_open)
         self.assertIsNotNone(self.hub.window)
         
-        expected_views = ["🏠 Home", "🕒 History", "📖 Vocabulary", "⚡ Snippets", "Aa Style", "📱 Phone", "⚙️ Settings"]
+        expected_views = ["🏠 Home", "🕒 History", "📊 Productivity", "📖 Vocabulary", "⚡ Snippets", "Aa Style", "📱 Phone", "⚙️ Settings"]
         for v in expected_views:
             self.assertIn(v, self.hub.views)
             self.assertIsNotNone(self.hub.views[v])
@@ -72,7 +72,7 @@ class TestDesktopHubUI(unittest.TestCase):
         """Verify navigating across all tabs updates active_tab_name and highlights."""
         self.hub.show()
 
-        tabs = ["🕒 History", "📖 Vocabulary", "⚡ Snippets", "Aa Style", "📱 Phone", "⚙️ Settings", "🏠 Home"]
+        tabs = ["🕒 History", "📊 Productivity", "📖 Vocabulary", "⚡ Snippets", "Aa Style", "📱 Phone", "⚙️ Settings", "🏠 Home"]
         for tab in tabs:
             self.hub.navigate_to(tab)
             self.assertEqual(self.hub.active_tab_name, tab)
@@ -87,6 +87,18 @@ class TestDesktopHubUI(unittest.TestCase):
         # Trigger speak CTA
         home_view._handle_speak_cta()
         self.assertTrue(self.dictation_toggled)
+
+    def test_productivity_view_rendering_and_filters(self):
+        """Verify ProductivityView metric cards, time range filter, and chart canvas."""
+        self.hub.show()
+        self.hub.navigate_to("📊 Productivity")
+        prod_view = self.hub.views["📊 Productivity"]
+        self.assertIsNotNone(prod_view)
+        self.assertIsNotNone(prod_view.chart_canvas)
+
+        # Change range filter
+        prod_view._set_time_range("30 days")
+        self.assertEqual(prod_view.time_range, "30 days")
 
     def test_vocabulary_crud(self):
         """Verify adding, filtering, and deleting vocabulary terms."""
@@ -138,7 +150,7 @@ class TestDesktopHubUI(unittest.TestCase):
         self.assertNotIn("github profile", snippets_after)
 
     def test_style_view_mode_selection(self):
-        """Verify changing tone mode updates config."""
+        """Verify changing tone mode and live preview updates."""
         self.hub.show()
         self.hub.navigate_to("Aa Style")
         style_view = self.hub.views["Aa Style"]
@@ -149,8 +161,13 @@ class TestDesktopHubUI(unittest.TestCase):
         style_view._select_mode("code")
         self.assertEqual(self.config.get("dictation_mode"), "code")
 
+        # Test live preview style switching
+        style_view._set_preview_style("Formal")
+        self.assertEqual(style_view.active_preview_style, "Formal")
+        self.assertIn("circulate", style_view.output_text_lbl.cget("text").lower())
+
     def test_history_view_selection_and_copy(self):
-        """Verify selecting items in HistoryView populates inspector and clipboard."""
+        """Verify selecting items in HistoryView populates inspector, metadata, and clipboard."""
         self.config.add_history_entry({"timestamp": "2026-09-19 12:00:00", "text": "Test dictation for history view", "mode": "smart_flow"})
         self.hub.show()
         self.hub.navigate_to("🕒 History")
@@ -158,6 +175,7 @@ class TestDesktopHubUI(unittest.TestCase):
 
         hist_view._load_items()
         self.assertIsNotNone(hist_view.selected_item)
+        self.assertEqual(hist_view.meta_labels["model_display"].cget("text"), "Google Gemini")
 
         hist_view._copy_selected()
         copied = self.hub.window.clipboard_get()
