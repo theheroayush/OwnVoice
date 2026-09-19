@@ -180,7 +180,9 @@ class OwnVoiceApp:
             audio_recorder=self.audio_recorder,
             snippet_engine=self.snippet_engine,
             on_settings_changed=self.reload_settings,
-            bridge_server=self.bridge_server
+            bridge_server=self.bridge_server,
+            note_store=self.note_store,
+            on_toggle_dictation=self.toggle_dictation
         )
 
         self.hotkey_manager = HotkeyManager(

@@ -31,6 +31,7 @@ class InMemoryConfigManager:
                 "c#": "Console.WriteLine();"
             }
         }
+        self.history = []
         if initial_config:
             self.config.update(initial_config)
 
@@ -41,13 +42,61 @@ class InMemoryConfigManager:
         self.config[key] = value
 
     def load_history(self):
-        return []
+        return list(self.history)
 
     def add_history_entry(self, entry):
-        pass
+        self.history.insert(0, entry)
 
     def clear_history(self):
-        pass
+        self.history = []
+
+    def get_productivity_stats(self, note_store=None):
+        return {
+            "words_today": 1284,
+            "dictations_today": 42,
+            "time_saved_min": 18,
+            "hours_saved_week": 3.2
+        }
+
+    def get_vocabulary(self):
+        raw = self.config.get("vocabulary", ["Aarav", "Bengaluru", "Kubernetes"])
+        return [item.get("term") if isinstance(item, dict) else item for item in raw]
+
+    def get_structured_vocabulary(self):
+        raw = self.config.get("vocabulary", [
+            {"term": "Aarav", "type": "Name", "replacement": "Aarav"},
+            {"term": "Bengaluru", "type": "Place", "replacement": "Bengaluru"},
+            {"term": "Kubernetes", "type": "Technology", "replacement": "Kubernetes"}
+        ])
+        out = []
+        for item in raw:
+            if isinstance(item, dict):
+                out.append(item)
+            elif isinstance(item, str):
+                out.append({"term": item, "type": "Jargon", "replacement": item})
+        return out
+
+    def add_vocabulary_term(self, term, term_type="Jargon", replacement=""):
+        vocab = self.get_structured_vocabulary()
+        for v in vocab:
+            if v["term"].lower() == term.strip().lower():
+                return False
+        vocab.append({
+            "term": term.strip(),
+            "type": term_type.capitalize() if term_type else "Jargon",
+            "replacement": replacement.strip() if replacement else term.strip()
+        })
+        self.config["vocabulary"] = vocab
+        return True
+
+    def remove_vocabulary_term(self, term):
+        vocab = self.get_structured_vocabulary()
+        orig_len = len(vocab)
+        vocab = [v for v in vocab if v["term"].lower() != term.strip().lower()]
+        if len(vocab) < orig_len:
+            self.config["vocabulary"] = vocab
+            return True
+        return False
 
 
 def generate_pcm_audio(duration_sec=1.0, sample_rate=48000, channels=1, amplitude=5000, freq=440.0):
