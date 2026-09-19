@@ -25,6 +25,9 @@ from ui.floating_widget import FloatingWidget
 from ui.settings_window import SettingsWindow
 from ui.tray_icon import TrayIcon
 from core.bridge_server import BridgeServer, get_local_ip
+from core.note_store import NoteStore
+from core.note_engine import NoteEngine
+from core.selection_reader import SelectionReader
 
 LOG_FILE = APP_BASE_DIR / "app.log"
 
@@ -139,6 +142,10 @@ class OwnVoiceApp:
         self.ai_engine = AIEngine(self.config)
         self.injector = CursorInjector(self.config)
         self.snippet_engine = SnippetEngine(self.config)
+        self.note_store = NoteStore()
+        self.note_engine = NoteEngine(self.config)
+        self.selection_reader = SelectionReader()
+        self.current_selection = None
         self.overlay_visible = True
         sound_effects.enabled = self.config.get("sound_effects", True)
         self.active_context_mode = "smart_flow"
@@ -147,13 +154,18 @@ class OwnVoiceApp:
             port=8765,
             on_inject=self.injector.inject_text,
             api_key=self.config.get("google_api_key", ""),
-            on_open_link=self.open_phone_link
+            on_open_link=self.open_phone_link,
+            note_store=self.note_store,
+            note_engine=self.note_engine,
+            selection_reader=self.selection_reader
         )
         self.bridge_server.start()
 
+        self.is_note_session = False
         self.overlay = FloatingWidget(
             get_volume_fn=self.audio_recorder.get_current_volume,
             on_click_toggle=self.toggle_dictation,
+            on_click_note_toggle=self.toggle_note_taker,
             on_open_settings=self.open_settings,
             on_cancel=self.cancel_dictation,
             on_hide=self.hide_overlay,
@@ -190,29 +202,41 @@ class OwnVoiceApp:
         self.hotkey_manager.stop()
         self.hotkey_manager.start()
 
-    def on_recording_start(self):
+    def on_recording_start(self, is_note_mode: bool = False):
+        self.is_note_session = is_note_mode
         # 1. Capture target window
         self.injector.update_target_hwnd()
 
-        # 2. Yield Settings VU monitor to prevent hardware contention
+        # 2. Check for highlighted on-screen text selection non-destructively
+        try:
+            self.current_selection = self.selection_reader.get_selected_text()
+            if self.current_selection:
+                log_event(f"Screen selection context captured ({len(self.current_selection)} chars): '{self.current_selection[:50]}...'")
+        except Exception:
+            self.current_selection = None
+
+        # 3. Yield Settings VU monitor to prevent hardware contention
         if self.settings_ui:
             self.settings_ui.stop_vu_monitor()
 
-        # 3. App-Aware Context Detection
-        if self.config.get("auto_context", True):
+        # 4. Mode Selection & App-Aware Context Detection
+        if self.is_note_session:
+            self.active_context_mode = "smart_note"
+            self.active_context_label = "Note Mode"
+        elif self.config.get("auto_context", True):
             self.active_context_mode, self.active_context_label = ContextDetector.detect_tone(self.injector.last_target_hwnd)
         else:
             self.active_context_mode = self.config.get("dictation_mode", "smart_flow")
             self.active_context_label = ""
 
-        log_event(f"Recording started (F8/click) [Context: {self.active_context_label} -> {self.active_context_mode}]")
+        log_event(f"Recording started ({'Note Taker' if self.is_note_session else 'Dictation'}) [Context: {self.active_context_label} -> {self.active_context_mode}]")
 
         if self.config.get("sound_effects", False):
             sound_effects.play_start()
         
         if self.overlay.root:
             self.overlay.root.after(0, self.overlay.show)
-            self.overlay.root.after(0, lambda: self.overlay.show_recording(self.active_context_label))
+            self.overlay.root.after(0, lambda: self.overlay.show_recording(self.active_context_label, is_note_mode=self.is_note_session))
             
         try:
             dev_idx = self.config.get("input_device_index", None)
@@ -230,8 +254,9 @@ class OwnVoiceApp:
         if self.config.get("sound_effects", False):
             sound_effects.play_stop()
 
+        is_note = getattr(self, "is_note_session", False)
         if self.overlay.root:
-            self.overlay.root.after(0, self.overlay.show_processing)
+            self.overlay.root.after(0, lambda: self.overlay.show_processing(is_note_mode=is_note))
 
         def process():
             try:
@@ -242,16 +267,49 @@ class OwnVoiceApp:
                     log_event("Audio too short — returning to dock")
                     if self.overlay.root:
                         self.overlay.root.after(0, self.overlay.dock)
+                    self.is_note_session = False
                     return
 
-                # AI Transcription with App-Aware Tone
-                text, latency = self.ai_engine.transcribe_audio(audio_bytes, mode=self.active_context_mode)
+                # If dedicated Note Taker session, compile structured note
+                if is_note:
+                    log_event("Compiling structured note with NoteEngine...")
+                    note_dict = self.note_engine.structure_note(
+                        audio_wav_bytes=audio_bytes,
+                        selection_context=self.current_selection,
+                        source="desktop_note_bar"
+                    )
+                    structured_text = note_dict.get("structured_content") or note_dict.get("summary") or ""
+                    title = note_dict.get("title", "Voice Note")
+                    nid = self.note_store.save_note(
+                        title=title,
+                        category=note_dict.get("category", "general"),
+                        structured_content=structured_text,
+                        raw_transcript=note_dict.get("raw_transcript", ""),
+                        tags=note_dict.get("tags", []),
+                        source="desktop_note_bar"
+                    )
+                    log_event(f"Structured note compiled and saved to SQLite (ID: {nid}): '{title}'")
+                    self.injector.inject_text(structured_text)
+                    if self.config.get("sound_effects", False):
+                        sound_effects.play_success()
+                    if self.overlay.root:
+                        self.overlay.root.after(0, lambda: self.overlay.show_success("Note Saved!", is_note_mode=True))
+                    self.is_note_session = False
+                    return
+
+                # AI Transcription with App-Aware Tone and Selection Context
+                text, latency = self.ai_engine.transcribe_audio(
+                    audio_bytes,
+                    mode=self.active_context_mode,
+                    selection_context=self.current_selection
+                )
                 log_event(f"Gemini transcription ({int(latency*1000)}ms): '{text}'")
 
                 if not text:
                     log_event("No speech recognized")
                     if self.overlay.root:
                         self.overlay.root.after(0, lambda: self.overlay.show_error("No speech"))
+                    self.is_note_session = False
                     return
 
                 raw_trimmed = text.strip()
@@ -265,6 +323,7 @@ class OwnVoiceApp:
                         sound_effects.play_success()
                     if self.overlay.root:
                         self.overlay.root.after(0, lambda: self.overlay.show_success("Erased last entry"))
+                    self.is_note_session = False
                     return
 
                 if raw_trimmed == "[COMMAND:CLEAR_ALL]" or norm_cmd in ["clear all", "delete line", "clear text"]:
@@ -274,6 +333,7 @@ class OwnVoiceApp:
                         sound_effects.play_success()
                     if self.overlay.root:
                         self.overlay.root.after(0, lambda: self.overlay.show_success("Cleared line"))
+                    self.is_note_session = False
                     return
 
                 # Voice Snippets Expansion
@@ -288,6 +348,21 @@ class OwnVoiceApp:
                     "latency": latency
                 })
 
+                # Auto-save structured note if in note mode or multi-line document
+                if self.active_context_mode in ("bullet_notes", "formal_document") or "\n" in expanded_text:
+                    try:
+                        title_line = expanded_text.splitlines()[0].lstrip("# -*").strip()[:50] or "Voice Note"
+                        self.note_store.save_note(
+                            title=title_line,
+                            category="bullet_notes" if self.active_context_mode == "bullet_notes" else "general",
+                            structured_content=expanded_text,
+                            raw_transcript=text,
+                            tags=["desktop", self.active_context_mode],
+                            source="desktop_hotkey"
+                        )
+                    except Exception as ne:
+                        log_event(f"Note auto-save notice: {ne}")
+
                 # Inject text into active search box / document
                 self.injector.inject_text(expanded_text)
                 log_event(f"Successfully injected: '{expanded_text[:40]}'")
@@ -297,19 +372,36 @@ class OwnVoiceApp:
 
                 if self.overlay.root:
                     self.overlay.root.after(0, lambda: self.overlay.show_success(expanded_text))
+                self.is_note_session = False
 
             except Exception as e:
                 log_event(f"Error during transcription: {e}")
+                err_str = str(e)
+                if "429" in err_str or "Quota" in err_str:
+                    toast_msg = "Gemini Quota Exceeded (429)"
+                elif "401" in err_str or "403" in err_str or "API Key" in err_str:
+                    toast_msg = "Invalid Gemini API Key"
+                elif "503" in err_str or "busy" in err_str.lower():
+                    toast_msg = "Gemini Busy (503)"
+                elif "timeout" in err_str.lower():
+                    toast_msg = "Network Timeout"
+                elif "404" in err_str:
+                    toast_msg = "Model Unavailable (404)"
+                else:
+                    toast_msg = f"Error: {err_str[:20]}"
+
                 if self.overlay.root:
-                    self.overlay.root.after(0, lambda: self.overlay.show_error(str(e)))
+                    self.overlay.root.after(0, lambda: self.overlay.show_error(toast_msg))
                 if self.config.get("sound_effects", False):
                     sound_effects.play_error()
+                self.is_note_session = False
 
         threading.Thread(target=process, daemon=True).start()
 
     def cancel_dictation(self):
         log_event("Recording cancelled by user via ✕ button.")
         self.audio_recorder.stop_recording()
+        self.is_note_session = False
         if self.settings_ui and hasattr(self.settings_ui, "resume_vu_monitor"):
             self.settings_ui.resume_vu_monitor()
         if self.overlay.root:
@@ -319,7 +411,13 @@ class OwnVoiceApp:
         if self.audio_recorder.is_recording:
             self.on_recording_stop()
         else:
-            self.on_recording_start()
+            self.on_recording_start(is_note_mode=False)
+
+    def toggle_note_taker(self):
+        if self.audio_recorder.is_recording:
+            self.on_recording_stop()
+        else:
+            self.on_recording_start(is_note_mode=True)
 
     def hide_overlay(self):
         self.overlay_visible = False

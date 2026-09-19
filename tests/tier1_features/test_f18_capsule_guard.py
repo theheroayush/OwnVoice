@@ -44,8 +44,8 @@ class TestF18CapsuleGuard(unittest.TestCase):
 
     def test_widget_geometry_dimensions(self):
         """Verify capsule default width and height."""
-        self.assertEqual(self.widget.width, 165)
-        self.assertEqual(self.widget.height, 34)
+        self.assertEqual(self.widget.width, self.widget.docked_width)
+        self.assertEqual(self.widget.height, 36)
 
     def test_euclidean_distance_threshold_calculation(self):
         """Verify Euclidean distance formula distinguishes 6px threshold."""

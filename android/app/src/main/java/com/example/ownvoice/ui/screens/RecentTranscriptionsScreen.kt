@@ -28,9 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ownvoice.OwnVoiceApplication
 import com.example.ownvoice.core.HistoryItem
-import com.example.ownvoice.network.BridgeClient
 import com.example.ownvoice.theme.DesignTokens
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -40,12 +38,12 @@ fun RecentTranscriptionsScreen(
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as OwnVoiceApplication
-    val scope = rememberCoroutineScope()
-    val bridgeClient = remember { BridgeClient(app.secureConfig, context) }
 
     var historyItems by remember { mutableStateOf(app.secureConfig.getHistory()) }
     var searchQuery by remember { mutableStateOf("") }
-    var showClearDialog by remember { mutableStateOf(false) }
+    var selectedFilter by remember { mutableStateOf("All") } // "All", "PC", "Phone"
+    var showClearAllDialog by remember { mutableStateOf(false) }
+    var itemToDelete by remember { mutableStateOf<HistoryItem?>(null) }
 
     var tts: TextToSpeech? by remember { mutableStateOf(null) }
     var isTtsReady by remember { mutableStateOf(false) }
@@ -72,13 +70,16 @@ fun RecentTranscriptionsScreen(
         Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
     }
 
-    val filteredItems = if (searchQuery.isBlank()) {
-        historyItems
-    } else {
-        historyItems.filter { it.text.contains(searchQuery, ignoreCase = true) }
-    }
+    val filteredItems = historyItems
+        .filter { item ->
+            if (selectedFilter == "All") true
+            else item.target.equals(selectedFilter, ignoreCase = true)
+        }
+        .filter { item ->
+            if (searchQuery.isBlank()) true
+            else item.text.contains(searchQuery, ignoreCase = true)
+        }
 
-    // Group items into Today, Yesterday, and older dates
     val now = System.currentTimeMillis()
     val dayMs = 24 * 60 * 60 * 1000L
 
@@ -108,79 +109,22 @@ fun RecentTranscriptionsScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Back",
+                        text = "Settings",
                         color = DesignTokens.ElectricBlue,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
 
-                Column(horizontalAlignment = Alignment.End) {
+                if (historyItems.isNotEmpty()) {
                     Text(
-                        text = "OwnVoice",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = DesignTokens.Colors.TextPrimary
-                    )
-                    Text(
-                        text = "Your voice, everywhere",
-                        fontSize = 10.sp,
-                        color = DesignTokens.Colors.TextSubtle
+                        text = "Clear All",
+                        color = DesignTokens.Colors.StatusRecording,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable { showClearAllDialog = true }
                     )
                 }
-            }
-        },
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DesignTokens.Colors.BackgroundDark)
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Delete button
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF3B1D22))
-                        .clickable { showClearDialog = true }
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Clear All",
-                        tint = DesignTokens.Colors.StatusRecording,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Load More Pill
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = DesignTokens.Colors.CardSurface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
-                    modifier = Modifier.clickable {
-                        Toast.makeText(context, "All transcriptions loaded", Toast.LENGTH_SHORT).show()
-                    }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    ) {
-                        Text("Load More", fontSize = 12.sp, color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(imageVector = Icons.Default.KeyboardArrowDown, contentDescription = "Load More", tint = DesignTokens.Colors.TextMuted, modifier = Modifier.size(16.dp))
-                    }
-                }
-
-                // Count
-                Text(
-                    text = "Total ${filteredItems.size} items",
-                    fontSize = 12.sp,
-                    color = DesignTokens.Colors.TextSubtle
-                )
             }
         }
     ) { padding ->
@@ -194,18 +138,26 @@ fun RecentTranscriptionsScreen(
             // Header
             item {
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Recent Transcriptions",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = DesignTokens.Colors.TextPrimary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Your voice history, always with you.",
-                    fontSize = 13.sp,
-                    color = DesignTokens.Colors.TextMuted
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Recent Transcriptions",
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DesignTokens.Colors.TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Total ${filteredItems.size} transcriptions",
+                            fontSize = 13.sp,
+                            color = DesignTokens.Colors.TextMuted
+                        )
+                    }
+                }
             }
 
             // Search Bar
@@ -215,7 +167,7 @@ fun RecentTranscriptionsScreen(
                     onValueChange = { searchQuery = it },
                     placeholder = {
                         Text(
-                            text = "Search your transcriptions...",
+                            text = "Search past dictations...",
                             fontSize = 13.sp,
                             color = DesignTokens.Colors.TextSubtle
                         )
@@ -254,12 +206,38 @@ fun RecentTranscriptionsScreen(
                 )
             }
 
+            // Filter Pills (All, PC, Phone)
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("All", "PC", "Phone").forEach { filter ->
+                        val isSelected = selectedFilter == filter
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) DesignTokens.Colors.PrimaryBlue else DesignTokens.Colors.CardSurface,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isSelected) DesignTokens.Colors.PrimaryBlue else DesignTokens.Colors.BorderSubtle
+                            ),
+                            modifier = Modifier.clickable { selectedFilter = filter }
+                        ) {
+                            Text(
+                                text = filter,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else DesignTokens.Colors.TextMuted,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Section 1: Today
             if (todayItems.isNotEmpty()) {
                 item {
                     SectionHeader(title = "Today", count = "${todayItems.size} items")
                 }
-                items(todayItems) { item ->
+                items(todayItems, key = { it.id }) { item ->
                     TranscriptionCard(
                         item = item,
                         onPlay = {
@@ -270,10 +248,7 @@ fun RecentTranscriptionsScreen(
                             }
                         },
                         onCopy = { copyToClipboard(item.text) },
-                        onDelete = {
-                            app.secureConfig.deleteHistoryItem(item.id)
-                            historyItems = app.secureConfig.getHistory()
-                        }
+                        onDelete = { itemToDelete = item }
                     )
                 }
             }
@@ -283,19 +258,18 @@ fun RecentTranscriptionsScreen(
                 item {
                     SectionHeader(title = "Yesterday", count = "${yesterdayItems.size} items")
                 }
-                items(yesterdayItems) { item ->
+                items(yesterdayItems, key = { it.id }) { item ->
                     TranscriptionCard(
                         item = item,
                         onPlay = {
                             if (isTtsReady && tts != null) {
                                 tts?.speak(item.text, TextToSpeech.QUEUE_FLUSH, null, item.id)
+                            } else {
+                                Toast.makeText(context, "Playing audio...", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onCopy = { copyToClipboard(item.text) },
-                        onDelete = {
-                            app.secureConfig.deleteHistoryItem(item.id)
-                            historyItems = app.secureConfig.getHistory()
-                        }
+                        onDelete = { itemToDelete = item }
                     )
                 }
             }
@@ -303,23 +277,20 @@ fun RecentTranscriptionsScreen(
             // Section 3: Older Dates
             if (olderItems.isNotEmpty()) {
                 item {
-                    val sdf = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-                    val sampleDate = sdf.format(Date(olderItems.first().timestamp))
-                    SectionHeader(title = sampleDate, count = "${olderItems.size} items")
+                    SectionHeader(title = "Older", count = "${olderItems.size} items")
                 }
-                items(olderItems) { item ->
+                items(olderItems, key = { it.id }) { item ->
                     TranscriptionCard(
                         item = item,
                         onPlay = {
                             if (isTtsReady && tts != null) {
                                 tts?.speak(item.text, TextToSpeech.QUEUE_FLUSH, null, item.id)
+                            } else {
+                                Toast.makeText(context, "Playing audio...", Toast.LENGTH_SHORT).show()
                             }
                         },
                         onCopy = { copyToClipboard(item.text) },
-                        onDelete = {
-                            app.secureConfig.deleteHistoryItem(item.id)
-                            historyItems = app.secureConfig.getHistory()
-                        }
+                        onDelete = { itemToDelete = item }
                     )
                 }
             }
@@ -332,30 +303,71 @@ fun RecentTranscriptionsScreen(
                         border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Box(modifier = Modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-                            Text("No transcriptions found.", color = DesignTokens.Colors.TextSubtle, fontSize = 13.sp)
+                        Box(modifier = Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "No matching transcriptions found." else "No transcriptions yet. Use the Voice Assistant to dictate!",
+                                color = DesignTokens.Colors.TextSubtle,
+                                fontSize = 13.sp
+                            )
                         }
                     }
                 }
             }
 
             item {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
 
-    if (showClearDialog) {
+    // Confirmation dialog for deleting single item
+    if (itemToDelete != null) {
+        val target = itemToDelete!!
         AlertDialog(
-            onDismissRequest = { showClearDialog = false },
+            onDismissRequest = { itemToDelete = null },
+            title = { Text("Delete Transcription?", color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = "Are you sure you want to delete this transcription?\n\n\"${target.text.take(60)}...\"",
+                    color = DesignTokens.Colors.TextMuted,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        app.secureConfig.deleteHistoryItem(target.id)
+                        historyItems = app.secureConfig.getHistory()
+                        itemToDelete = null
+                        Toast.makeText(context, "Transcription deleted", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.StatusRecording)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text("Cancel", color = DesignTokens.Colors.TextMuted)
+                }
+            },
+            containerColor = DesignTokens.Colors.CardSurface
+        )
+    }
+
+    // Confirmation dialog for Clear All
+    if (showClearAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllDialog = false },
             title = { Text("Clear All Transcriptions?", color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Bold) },
-            text = { Text("This will permanently remove all stored local dictations.", color = DesignTokens.Colors.TextMuted, fontSize = 13.sp) },
+            text = { Text("This will permanently remove all stored local dictations. This action cannot be undone.", color = DesignTokens.Colors.TextMuted, fontSize = 13.sp) },
             confirmButton = {
                 Button(
                     onClick = {
                         app.secureConfig.clearHistory()
                         historyItems = emptyList()
-                        showClearDialog = false
+                        showClearAllDialog = false
+                        Toast.makeText(context, "All transcriptions cleared", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.StatusRecording)
                 ) {
@@ -363,7 +375,7 @@ fun RecentTranscriptionsScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDialog = false }) {
+                TextButton(onClick = { showClearAllDialog = false }) {
                     Text("Cancel", color = DesignTokens.Colors.TextMuted)
                 }
             },
@@ -403,7 +415,6 @@ private fun TranscriptionCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Text quote
             Text(
                 text = "\"${item.text}\"",
                 fontSize = 13.sp,
@@ -414,110 +425,66 @@ private fun TranscriptionCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Subtitle info & action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(timeStr, fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("•", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
-                        Spacer(modifier = Modifier.width(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(timeStr, fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("•", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (item.target.equals("pc", ignoreCase = true)) DesignTokens.ElectricBlue.copy(alpha = 0.15f) else Color(0xFF0F766E).copy(alpha = 0.2f)
+                    ) {
                         Text(
                             text = item.target,
-                            fontSize = 11.sp,
-                            color = DesignTokens.Colors.TextMuted
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (item.target.equals("pc", ignoreCase = true)) DesignTokens.ElectricBlue else Color(0xFF2DD4BF),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
-                    }
-
-                    if (item.tags.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            item.tags.forEach { tag ->
-                                TagPill(tag = tag)
-                            }
-                        }
                     }
                 }
 
-                // Action Buttons
+                // Action buttons
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     // Play
-                    Box(
-                        contentAlignment = Alignment.Center,
+                    IconButton(
+                        onClick = onPlay,
                         modifier = Modifier
                             .size(30.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF1E293B))
-                            .clickable(onClick = onPlay)
                     ) {
                         Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(16.dp))
                     }
 
                     // Copy
-                    Box(
-                        contentAlignment = Alignment.Center,
+                    IconButton(
+                        onClick = onCopy,
                         modifier = Modifier
                             .size(30.dp)
                             .clip(CircleShape)
                             .background(Color(0xFF1E293B))
-                            .clickable(onClick = onCopy)
                     ) {
                         Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color.White, modifier = Modifier.size(14.dp))
                     }
 
-                    // Delete
-                    Box(
-                        contentAlignment = Alignment.Center,
+                    // Delete (Trash icon with confirmation)
+                    IconButton(
+                        onClick = onDelete,
                         modifier = Modifier
                             .size(30.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF1E293B))
-                            .clickable(onClick = onDelete)
+                            .background(Color(0xFF3B1D22))
                     ) {
-                        Icon(imageVector = Icons.Default.MoreHoriz, contentDescription = "More", tint = DesignTokens.Colors.TextMuted, modifier = Modifier.size(16.dp))
+                        Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete", tint = DesignTokens.Colors.StatusRecording, modifier = Modifier.size(14.dp))
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun TagPill(tag: String) {
-    val bg = when (tag.lowercase()) {
-        "work" -> Color(0xFF1E3A8A).copy(alpha = 0.4f)
-        "meeting" -> Color(0xFF581C87).copy(alpha = 0.4f)
-        "personal" -> Color(0xFF065F46).copy(alpha = 0.4f)
-        "research" -> Color(0xFF312E81).copy(alpha = 0.4f)
-        "ideas" -> Color(0xFF0E7490).copy(alpha = 0.4f)
-        "content" -> Color(0xFF9A3412).copy(alpha = 0.4f)
-        else -> Color(0xFF0F766E).copy(alpha = 0.4f)
-    }
-
-    val textCol = when (tag.lowercase()) {
-        "work" -> DesignTokens.ElectricBlue
-        "meeting" -> DesignTokens.PurpleAccent
-        "personal" -> DesignTokens.StatusGreen
-        "research" -> Color(0xFFA5B4FC)
-        "ideas" -> Color(0xFF67E8F9)
-        "content" -> Color(0xFFFDBA74)
-        else -> Color(0xFF5EEAD4)
-    }
-
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = bg
-    ) {
-        Text(
-            text = tag,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = textCol,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-        )
     }
 }

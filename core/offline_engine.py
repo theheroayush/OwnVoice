@@ -90,7 +90,7 @@ class OfflineWhisperEngine:
         start_time = time.time()
 
         if not self.is_model_available() or self.session is None:
-            return ("(Offline fallback: network unavailable)", time.time() - start_time)
+            return ("", time.time() - start_time)
 
         try:
             with wave.open(io.BytesIO(wav_bytes), "rb") as wf:

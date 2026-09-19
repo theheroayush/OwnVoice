@@ -91,13 +91,27 @@ object TonePromptManager {
 
     fun getPrompt(
         mode: String,
+        language: String = "English (US)",
         customInstructions: String = "",
         vocabulary: List<String> = emptyList(),
         snippets: Map<String, String> = emptyMap(),
-        enableSelfCorrection: Boolean = true
+        enableSelfCorrection: Boolean = true,
+        enableVoiceCommands: Boolean = true,
+        personalLexicon: List<String> = emptyList()
     ): String {
         val basePrompt = PROMPTS[mode] ?: PROMPTS["smart_flow"]!!
         val builder = StringBuilder(basePrompt)
+
+        // Language targeting
+        when (language.trim()) {
+            "Hindi" -> builder.append("\n\nTARGET LANGUAGE: Hindi. Transcribe speech naturally in Hindi using Devanagari script.")
+            "Spanish" -> builder.append("\n\nTARGET LANGUAGE: Spanish. Transcribe speech cleanly in fluent Spanish.")
+            "French" -> builder.append("\n\nTARGET LANGUAGE: French. Transcribe speech cleanly in fluent French.")
+            "German" -> builder.append("\n\nTARGET LANGUAGE: German. Transcribe speech cleanly in fluent German.")
+            "English (India)" -> builder.append("\n\nTARGET LANGUAGE: Indian English. Capture Indian English vocabulary, terms, and context naturally.")
+            "English (UK)" -> builder.append("\n\nTARGET LANGUAGE: British English. Use British spelling conventions.")
+            else -> builder.append("\n\nTARGET LANGUAGE: English.")
+        }
 
         if (enableSelfCorrection) {
             builder.append("\n\nSELF-CORRECTION & SPOKEN COMMANDS:")
@@ -105,6 +119,11 @@ object TonePromptManager {
             builder.append("\n- ERASURE COMMANDS: If the speaker says ONLY 'scratch that', 'delete that', 'undo that', 'clear that', or 'erase that', output exactly '[COMMAND:DELETE_LAST]'.")
             builder.append("\n- CLEAR ALL COMMANDS: If the speaker says ONLY 'clear all', 'delete line', or 'clear text', output exactly '[COMMAND:CLEAR_ALL]'.")
             builder.append("\n- CLIPBOARD PASTE COMMAND: If the speaker says ONLY 'paste', 'paste it', 'paste that', or 'paste it here', output exactly '[COMMAND:PASTE]'.")
+        }
+
+        if (enableVoiceCommands) {
+            builder.append("\n\nSPOKEN PUNCTUATION & COMMANDS:")
+            builder.append("\n- Convert spoken punctuation keywords into symbols: 'period' -> '.', 'comma' -> ',', 'question mark' -> '?', 'exclamation point' -> '!', 'colon' -> ':', 'semi-colon' -> ';', 'open quote'/'close quote' -> '\"'.")
             builder.append("\n- FORMATTING COMMANDS: If the speaker says 'new line' or 'next line', insert a newline. If they say 'new paragraph', insert two newlines.")
         }
 
@@ -117,9 +136,10 @@ object TonePromptManager {
             builder.append("\nEnsure the substitution flows naturally in the sentence without leaving awkward carrier words like 'put ... here'.")
         }
 
-        if (vocabulary.isNotEmpty()) {
-            builder.append("\n\nPRIORITIZED VOCABULARY & NAMES (use exact spelling):")
-            builder.append("\n${vocabulary.joinToString(", ")}")
+        val combinedVocab = (vocabulary + personalLexicon).distinct().filter { it.isNotBlank() }
+        if (combinedVocab.isNotEmpty()) {
+            builder.append("\n\nPRIORITIZED PERSONAL VOCABULARY & LEARNED TERMS (use exact spelling):")
+            builder.append("\n${combinedVocab.joinToString(", ")}")
         }
 
         if (customInstructions.isNotBlank()) {

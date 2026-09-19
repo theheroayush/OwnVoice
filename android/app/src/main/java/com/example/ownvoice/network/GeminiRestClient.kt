@@ -33,7 +33,11 @@ class GeminiRestClient(private val config: SecureConfig) {
 
     private var activeWorkingModel: String = "gemini-3.6-flash"
 
-    suspend fun transcribeAudio(wavBytes: ByteArray, mode: String = config.dictationMode): Pair<String, Long> = withContext(Dispatchers.IO) {
+    suspend fun transcribeAudio(
+        wavBytes: ByteArray,
+        mode: String = config.dictationMode,
+        personalLexicon: List<String> = emptyList()
+    ): Pair<String, Long> = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         val apiKey = config.apiKey.trim()
         if (apiKey.isBlank()) {
@@ -47,10 +51,13 @@ class GeminiRestClient(private val config: SecureConfig) {
         val base64Audio = Base64.encodeToString(wavBytes, Base64.NO_WRAP)
         val prompt = TonePromptManager.getPrompt(
             mode = mode,
+            language = config.language,
             customInstructions = config.customInstructions,
             vocabulary = config.getVocabulary(),
             snippets = config.getSnippets(),
-            enableSelfCorrection = config.isSelfCorrectionEnabled
+            enableSelfCorrection = config.isSelfCorrectionEnabled,
+            enableVoiceCommands = config.isVoiceCommandsEnabled,
+            personalLexicon = personalLexicon
         )
 
         val jsonPayload = JSONObject().apply {

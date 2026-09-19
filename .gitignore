@@ -1,20 +1,36 @@
 # Environment & Secrets
 .env
+.env*.local
 config.json
 *.pem
 *.key
+
+# Local Data & SQLite
+*.db
+*.sqlite
+*.sqlite3
+notes.db
 
 # Logs
 *.log
 app.log
 
-# Python cache
+# Python cache & builds
 __pycache__/
 *.py[cod]
 *$py.class
 build/
 dist/
 *.spec
+
+# Node & Next.js
+node_modules/
+.next/
+.turbo/
+out/
+
+# Temporary test images
+wispr_preview_test.png
 
 # System & Agents
 .DS_Store

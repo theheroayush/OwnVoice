@@ -45,6 +45,32 @@ If you have been granted access to this private repository, you can download and
 2. Double-click **`OwnVoice.exe`**.
 3. Press **`F8`** anywhere on Windows to start dictating!
 
+---
+
+## 🌐 Own Voice Web Application & BYOK Platform (Next.js 15)
+
+Own Voice now includes a complete, production-grade Next.js 15 web application with full Bring-Your-Own-Key (BYOK) architecture, multi-provider support (OpenAI, Gemini, Anthropic, Groq), marketing pages, search history, custom instructions, and lifetime license verification.
+
+### Quick Start (Web App)
+```cmd
+# 1-Click Launch on Windows:
+run_web.bat
+
+# Or using npm:
+npm run dev
+```
+Open **`http://localhost:3000`** in your browser.
+
+- **Interactive Demo**: Try live voice transformation right on the homepage (`/`).
+- **Web Workspace**: Dictate with real-time waveform visualizers and 1-click quick actions (`/app`).
+- **Onboarding**: 7-step onboarding wizard under 2 minutes (`/onboarding`).
+- **Settings & BYOK**: Connect and test AES-256-GCM encrypted API keys (`/app/settings`).
+- **Admin Portal**: Inspect system KPIs, users, and lifetime licenses (`/admin`).
+  - **Admin Email**: `admin@ownvoice.ai`
+  - **Password**: `AdminPassword123!`
+
+---
+
 ## 🌟 What is OwnVoice?
 
 Imagine having a lightning-fast personal secretary sitting right inside your Windows PC. Whenever you need to write an email, send a Slack message, search Google, write a document, or even write code:

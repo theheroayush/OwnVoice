@@ -1,5 +1,6 @@
 package com.example.ownvoice.ui.screens
 
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,14 +26,14 @@ import androidx.compose.ui.unit.sp
 import com.example.ownvoice.OwnVoiceApplication
 import com.example.ownvoice.network.BridgeClient
 import com.example.ownvoice.theme.DesignTokens
-import com.example.ownvoice.ui.components.BottomNavBar
-import com.example.ownvoice.ui.navigation.ScreenDestination
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ConnectedDevicesScreen(
     onBack: () -> Unit,
-    onNavigate: (ScreenDestination) -> Unit,
+    onNavigate: (com.example.ownvoice.ui.navigation.ScreenDestination) -> Unit,
     onConnectNewDevice: () -> Unit
 ) {
     val context = LocalContext.current
@@ -42,11 +43,17 @@ fun ConnectedDevicesScreen(
 
     var bridgeIp by remember { mutableStateOf(app.secureConfig.desktopBridgeIp) }
     var bridgeName by remember { mutableStateOf(app.secureConfig.desktopBridgeName) }
-    var statusMessage by remember { mutableStateOf("") }
-    var showDeviceOptionsDialog by remember { mutableStateOf<String?>(null) }
+    var isUseForPc by remember { mutableStateOf(app.secureConfig.isUseForPcEnabled) }
+    var isPinging by remember { mutableStateOf(false) }
+    var pingStatus by remember { mutableStateOf("") }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
 
     val hasPairedPc = bridgeIp.isNotBlank()
-    val totalDeviceCount = if (hasPairedPc) 3 else 2
+
+    // Real Android hardware info
+    val phoneManufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+    val phoneModel = Build.MODEL
+    val androidVersion = Build.VERSION.RELEASE
 
     Scaffold(
         containerColor = DesignTokens.Colors.BackgroundDark,
@@ -85,20 +92,12 @@ fun ConnectedDevicesScreen(
                         color = DesignTokens.Colors.TextPrimary
                     )
                     Text(
-                        text = "Your voice, everywhere",
+                        text = "Device Ecosystem",
                         fontSize = 10.sp,
                         color = DesignTokens.Colors.TextSubtle
                     )
                 }
             }
-        },
-        bottomBar = {
-            BottomNavBar(
-                currentDestination = ScreenDestination.ConnectedDevices,
-                onNavigate = onNavigate,
-                showCenterMic = true,
-                onCenterMicClick = { onNavigate(ScreenDestination.Home) }
-            )
         }
     ) { padding ->
         LazyColumn(
@@ -106,7 +105,7 @@ fun ConnectedDevicesScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Header
             item {
@@ -119,13 +118,13 @@ fun ConnectedDevicesScreen(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Manage the computers and devices linked to your account.",
+                    text = "Manage computers and local bridges paired with your voice assistant.",
                     fontSize = 13.sp,
                     color = DesignTokens.Colors.TextMuted
                 )
             }
 
-            // Summary Hero Card
+            // Summary Card
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -147,7 +146,7 @@ fun ConnectedDevicesScreen(
                                 .background(Color(0xFF1E3A8A).copy(alpha = 0.5f))
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Laptop,
+                                imageVector = Icons.Default.Devices,
                                 contentDescription = "Devices",
                                 tint = DesignTokens.ElectricBlue,
                                 modifier = Modifier.size(24.dp)
@@ -156,14 +155,14 @@ fun ConnectedDevicesScreen(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column {
                             Text(
-                                text = "$totalDeviceCount devices connected",
+                                text = if (hasPairedPc) "2 Devices in Mesh" else "1 Device Active",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = DesignTokens.Colors.TextPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Your voice is available on all your devices.",
+                                text = if (hasPairedPc) "Phone microphone linked to PC cursor" else "Phone voice dictation ready",
                                 fontSize = 12.sp,
                                 color = DesignTokens.Colors.TextMuted
                             )
@@ -172,7 +171,17 @@ fun ConnectedDevicesScreen(
                 }
             }
 
-            // Device 1: MacBook Pro (Current device)
+            // Device 1: This Android Device (Real hardware detection)
+            item {
+                Text(
+                    text = "THIS DEVICE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DesignTokens.Colors.TextSubtle,
+                    letterSpacing = 0.8.sp
+                )
+            }
+
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -191,26 +200,26 @@ fun ConnectedDevicesScreen(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF1E293B))
+                                .background(Color(0xFF0F766E).copy(alpha = 0.3f))
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Laptop,
-                                contentDescription = "MacBook Pro",
-                                tint = DesignTokens.Colors.TextMuted,
+                                imageVector = Icons.Default.Smartphone,
+                                contentDescription = "Android Phone",
+                                tint = Color(0xFF2DD4BF),
                                 modifier = Modifier.size(22.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "MacBook Pro",
+                                text = "$phoneManufacturer $phoneModel",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = DesignTokens.Colors.TextPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "macOS 14.6 • Chrome",
+                                text = "Android $androidVersion • OwnVoice v2.6.0",
                                 fontSize = 11.sp,
                                 color = DesignTokens.Colors.TextMuted
                             )
@@ -220,7 +229,7 @@ fun ConnectedDevicesScreen(
                                 color = DesignTokens.Colors.PrimaryBlue.copy(alpha = 0.2f)
                             ) {
                                 Text(
-                                    text = "Current device",
+                                    text = "Current Device",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.ElectricBlue,
@@ -228,197 +237,177 @@ fun ConnectedDevicesScreen(
                                 )
                             }
                         }
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Navigate",
-                            tint = DesignTokens.Colors.TextSubtle,
-                            modifier = Modifier.size(18.dp)
-                        )
                     }
                 }
             }
 
-            // Device 2: Windows PC
+            // Device 2: Paired PC Bridge Target
             item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = DesignTokens.Colors.CardSurface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = "PAIRED DESKTOP TARGET",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DesignTokens.Colors.TextSubtle,
+                    letterSpacing = 0.8.sp
+                )
+            }
+
+            if (hasPairedPc) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = DesignTokens.Colors.CardSurface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.StatusReady.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(Color(0xFF1E293B))
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Laptop,
+                                            contentDescription = "PC",
+                                            tint = DesignTokens.ElectricBlue,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = bridgeName.ifBlank { "Windows PC" },
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = DesignTokens.Colors.TextPrimary
+                                        )
+                                        Text(
+                                            text = "$bridgeIp:8765",
+                                            fontSize = 12.sp,
+                                            color = DesignTokens.Colors.StatusReady
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = DesignTokens.Colors.StatusReady.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "PAIRED",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DesignTokens.Colors.StatusReady,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            if (pingStatus.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = pingStatus,
+                                    fontSize = 12.sp,
+                                    color = if (pingStatus.startsWith("Connected")) DesignTokens.Colors.StatusReady else DesignTokens.Colors.StatusRecording
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        isPinging = true
+                                        pingStatus = "Testing bridge link at $bridgeIp:8765..."
+                                        scope.launch {
+                                            val ok = withContext(Dispatchers.IO) { bridgeClient.checkStatus(bridgeIp) }
+                                            isPinging = false
+                                            pingStatus = if (ok) "Connected & Responsive! (HTTP 200 OK)" else "Offline or Unreachable (${bridgeClient.lastError})"
+                                        }
+                                    },
+                                    enabled = !isPinging,
+                                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.PrimaryBlue),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(if (isPinging) "Testing..." else "Test Ping")
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val ok = withContext(Dispatchers.IO) {
+                                                bridgeClient.sendToDesktop(
+                                                    desktopIp = bridgeIp,
+                                                    text = "Hello from OwnVoice Android! 🎉",
+                                                    token = app.secureConfig.desktopBridgeToken
+                                                )
+                                            }
+                                            Toast.makeText(context, if (ok) "Typed test string into PC!" else "Failed to send keystrokes", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Test Type", color = DesignTokens.Colors.TextPrimary)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        bridgeIp = ""
+                                        bridgeName = ""
+                                        app.secureConfig.desktopBridgeIp = ""
+                                        app.secureConfig.desktopBridgeName = ""
+                                        app.secureConfig.desktopBridgeToken = ""
+                                        app.secureConfig.desktopBridgePin = ""
+                                        app.secureConfig.isUseForPcEnabled = false
+                                        isUseForPc = false
+                                        Toast.makeText(context, "Unpaired from PC", Toast.LENGTH_SHORT).show()
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B1D22))
+                                ) {
+                                    Icon(imageVector = Icons.Default.Delete, contentDescription = "Unpair", tint = DesignTokens.Colors.StatusRecording, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = DesignTokens.Colors.CardSurface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF1E293B))
+                            modifier = Modifier.padding(20.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Window,
-                                contentDescription = "Windows PC",
-                                tint = DesignTokens.ElectricBlue,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (bridgeName.isNotBlank()) bridgeName else "Windows PC",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = DesignTokens.Colors.TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (hasPairedPc) "Windows 11 • Connected ($bridgeIp:8765)" else "Windows 11 • OwnVoice App",
-                                fontSize = 11.sp,
-                                color = if (hasPairedPc) DesignTokens.Colors.StatusReady else DesignTokens.Colors.TextMuted
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (hasPairedPc) "Live streaming active" else "Last active: 2 hours ago",
-                                fontSize = 10.sp,
+                                text = "No computer linked yet. Tap below to connect via Wi-Fi sweep or QR Code.",
+                                fontSize = 13.sp,
                                 color = DesignTokens.Colors.TextSubtle
                             )
                         }
-                        IconButton(onClick = { showDeviceOptionsDialog = "Windows PC" }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreHoriz,
-                                contentDescription = "Options",
-                                tint = DesignTokens.Colors.TextMuted
-                            )
-                        }
                     }
                 }
             }
 
-            // Device 3: Ayush's iPhone
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = DesignTokens.Colors.CardSurface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF1E293B))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Smartphone,
-                                contentDescription = "iPhone",
-                                tint = DesignTokens.Colors.TextMuted,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Ayush's iPhone",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = DesignTokens.Colors.TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "iOS 18 • OwnVoice App",
-                                fontSize = 11.sp,
-                                color = DesignTokens.Colors.TextMuted
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Last active: 1 day ago",
-                                fontSize = 10.sp,
-                                color = DesignTokens.Colors.TextSubtle
-                            )
-                        }
-                        IconButton(onClick = { showDeviceOptionsDialog = "Ayush's iPhone" }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreHoriz,
-                                contentDescription = "Options",
-                                tint = DesignTokens.Colors.TextMuted
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Device 4: iPad
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = DesignTokens.Colors.CardSurface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF1E293B))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Tablet,
-                                contentDescription = "iPad",
-                                tint = DesignTokens.Colors.TextMuted,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "iPad",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = DesignTokens.Colors.TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "iPadOS 17 • OwnVoice App",
-                                fontSize = 11.sp,
-                                color = DesignTokens.Colors.TextMuted
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Last active: 3 days ago",
-                                fontSize = 10.sp,
-                                color = DesignTokens.Colors.TextSubtle
-                            )
-                        }
-                        IconButton(onClick = { showDeviceOptionsDialog = "iPad" }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreHoriz,
-                                contentDescription = "Options",
-                                tint = DesignTokens.Colors.TextMuted
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Action: Connect a New Device
+            // Action: Connect / Reconnect New Computer
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -439,26 +428,26 @@ fun ConnectedDevicesScreen(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Color(0xFF1E293B))
+                                .background(DesignTokens.Colors.PrimaryBlue.copy(alpha = 0.2f))
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Connect New",
-                                tint = Color.White,
+                                imageVector = Icons.Default.AddLink,
+                                contentDescription = "Pair",
+                                tint = DesignTokens.ElectricBlue,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Connect a New Device",
+                                text = if (hasPairedPc) "Pair Another Computer" else "Connect Your Computer",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = DesignTokens.Colors.TextPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Link another device to use OwnVoice.",
+                                text = "Link Windows PC or Mac via Wi-Fi or QR Code",
                                 fontSize = 11.sp,
                                 color = DesignTokens.Colors.TextMuted
                             )
@@ -479,7 +468,9 @@ fun ConnectedDevicesScreen(
                     shape = RoundedCornerShape(16.dp),
                     color = DesignTokens.Colors.CardSurface,
                     border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showPrivacyDialog = true }
                 ) {
                     Row(
                         modifier = Modifier
@@ -504,14 +495,14 @@ fun ConnectedDevicesScreen(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Your data stays private",
+                                text = "Local Bridge Encryption",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = DesignTokens.Colors.TextPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "All voice data is end-to-end encrypted and synced securely across your devices.",
+                                text = "Audio and keystrokes travel over your private local network. Tap for details.",
                                 fontSize = 11.sp,
                                 color = DesignTokens.Colors.TextMuted,
                                 lineHeight = 15.sp
@@ -519,48 +510,40 @@ fun ConnectedDevicesScreen(
                         }
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Navigate",
+                            contentDescription = "Details",
                             tint = DesignTokens.Colors.TextSubtle,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
 
-    if (showDeviceOptionsDialog != null) {
-        val device = showDeviceOptionsDialog!!
+    if (showPrivacyDialog) {
         AlertDialog(
-            onDismissRequest = { showDeviceOptionsDialog = null },
-            title = { Text(device, color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Bold) },
+            onDismissRequest = { showPrivacyDialog = false },
+            title = { Text("Local Bridge Security", color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    Text("Device status: Connected via local bridge network.", color = DesignTokens.Colors.TextMuted, fontSize = 13.sp)
+                    Text(
+                        text = "OwnVoice connects your Android phone directly to your computer using your local Wi-Fi router (Port 8765 TCP & 8766 UDP).\n\n" +
+                               "• Zero Cloud Relays: Keystrokes never touch third-party servers.\n" +
+                               "• SHA-256 Token Auth: All desktop keystroke injections require session token authentication.\n" +
+                               "• Full Local Control: You can pause or unpair at any time.",
+                        color = DesignTokens.Colors.TextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
                 }
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        scope.launch {
-                            if (hasPairedPc) {
-                                val ok = bridgeClient.checkStatus(bridgeIp)
-                                Toast.makeText(context, if (ok) "PC is reachable!" else "PC offline", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Device ping successful", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        showDeviceOptionsDialog = null
-                    },
+                    onClick = { showPrivacyDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.PrimaryBlue)
                 ) {
-                    Text("Ping Device")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeviceOptionsDialog = null }) {
-                    Text("Close", color = DesignTokens.Colors.TextMuted)
+                    Text("Understood")
                 }
             },
             containerColor = DesignTokens.Colors.CardSurface

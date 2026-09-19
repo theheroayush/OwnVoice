@@ -1,0 +1,193 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String             @id @default(cuid())
+  email         String             @unique
+  passwordHash  String
+  name          String?
+  avatar        String?
+  role          String             @default("USER") // USER, ADMIN
+  status        String             @default("ACTIVE") // ACTIVE, SUSPENDED
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  lastLoginAt   DateTime?
+  licenses      License[]
+  purchases     Purchase[]
+  providers     UserProvider[]
+  recordings    Recording[]
+  generations   Generation[]
+  instructions  CustomInstruction[]
+  settings      UserSettings?
+  devices       Device[]
+  usageEvents   UsageEvent[]
+  auditLogs     AuditLog[]
+}
+
+model License {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseKey    String    @unique
+  productId     String    @default("ownvoice-lifetime")
+  purchaseId    String?   @unique
+  purchase      Purchase? @relation(fields: [purchaseId], references: [id])
+  status        String    @default("ACTIVE") // ACTIVE, REVOKED, REFUNDED, SUSPENDED
+  activatedAt   DateTime  @default(now())
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+model Purchase {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String    @default("stripe") // stripe, razorpay, lemon_squeezy
+  transactionId String    @unique
+  amount        Int       // In cents/paise (e.g. 4900 = $49.00 or Rs 3999)
+  currency      String    @default("USD")
+  productId     String    @default("ownvoice-lifetime")
+  status        String    @default("COMPLETED") // PENDING, COMPLETED, FAILED, REFUNDED
+  purchasedAt   DateTime  @default(now())
+  metadata      String?   // JSON string
+  license       License?
+}
+
+model UserProvider {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String    // openai, google, anthropic, groq
+  encryptedKey  String    // AES-256-GCM hex:iv:tag
+  keyHint       String    // ••••••••8F21
+  selectedModel String
+  isActive      Boolean   @default(true)
+  isValid       Boolean   @default(true)
+  lastTestedAt  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([userId, provider])
+}
+
+model Recording {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  durationSec   Int            @default(0)
+  mimeType      String         @default("audio/webm")
+  createdAt     DateTime       @default(now())
+  transcript    Transcript?
+  generation    Generation?
+}
+
+model Transcript {
+  id            String         @id @default(cuid())
+  recordingId   String         @unique
+  recording     Recording      @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  rawText       String
+  language      String         @default("en")
+  confidence    Float          @default(1.0)
+  providerUsed  String
+  createdAt     DateTime       @default(now())
+}
+
+model Generation {
+  id            String              @id @default(cuid())
+  recordingId   String?             @unique
+  recording     Recording?          @relation(fields: [recordingId], references: [id], onDelete: SetNull)
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  intent        String              @default("CLEAN") // TRANSCRIBE, CLEAN, REWRITE, EMAIL, MESSAGE, SUMMARY, NOTE, PROMPT, CODE, CUSTOM
+  targetTone    String              @default("NATURAL") // NATURAL, PROFESSIONAL, CASUAL, CONCISE, EXPANDED
+  rawInput      String
+  outputText    String
+  wordCount     Int                 @default(0)
+  tags          String?             // Comma-separated or JSON
+  isFavorite    Boolean             @default(false)
+  providerUsed  String
+  modelUsed     String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  versions      GenerationVersion[]
+}
+
+model GenerationVersion {
+  id            String      @id @default(cuid())
+  generationId  String
+  generation    Generation  @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  actionTaken   String      // INITIAL, REWRITE_CASUAL, REWRITE_PROFESSIONAL, SHORTEN, EXPAND, SUMMARIZE
+  outputText    String
+  createdAt     DateTime    @default(now())
+}
+
+model Prompt {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  systemPrompt String
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model CustomInstruction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  instruction String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UserSettings {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultProvider       String    @default("openai")
+  defaultModel          String    @default("gpt-4o")
+  defaultTone           String    @default("NATURAL")
+  autoPunctuation       Boolean   @default(true)
+  deleteAudioImmediate  Boolean   @default(true)
+  microphoneDeviceId    String?
+  updatedAt             DateTime  @updatedAt
+}
+
+model Device {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceName  String
+  clientType  String    // WEB, DESKTOP_WINDOWS, DESKTOP_MAC, MOBILE
+  lastActive  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+}
+
+model UsageEvent {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  eventType   String    // landing_view, recording_started, generation_completed, etc.
+  metadata    String?   // JSON
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action      String    // KEY_CONNECTED, KEY_REVOKED, LICENSE_ACTIVATED, USER_SUSPENDED
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+}

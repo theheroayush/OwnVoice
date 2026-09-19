@@ -1,6 +1,8 @@
 package com.example.ownvoice.ime
 
 import android.Manifest
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.inputmethodservice.InputMethodService
 import android.os.Build
@@ -29,8 +31,14 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.example.ownvoice.OwnVoiceApplication
 import com.example.ownvoice.audio.AudioRecordStreamer
+import com.example.ownvoice.core.PersonalLexiconManager
 import com.example.ownvoice.core.SnippetEngine
 import com.example.ownvoice.core.TonePromptManager
+import com.example.ownvoice.ime.model.ActionKeyType
+import com.example.ownvoice.ime.model.ClipboardItem
+import com.example.ownvoice.ime.model.KeyboardLayoutMode
+import com.example.ownvoice.ime.model.KeystrokeEvent
+import com.example.ownvoice.ime.model.KeystrokeType
 import com.example.ownvoice.ime.ui.KeyboardState
 import com.example.ownvoice.ime.ui.KeyboardView
 import com.example.ownvoice.network.BridgeClient
@@ -69,6 +77,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     private lateinit var geminiClient: GeminiRestClient
     private lateinit var snippetEngine: SnippetEngine
     private lateinit var bridgeClient: BridgeClient
+    private lateinit var personalLexicon: PersonalLexiconManager
     private var vibrator: Vibrator? = null
     private var lastBackspaceHapticTime = 0L
 
@@ -85,21 +94,39 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     private var dismissJob: Job? = null
     private var currentClipboardText by mutableStateOf("")
 
-    private fun updateClipboardPreview() {
+    private var currentLayoutMode by mutableStateOf(KeyboardLayoutMode.QWERTY)
+    private var currentActionKeyType by mutableStateOf(ActionKeyType.ENTER)
+    private val clipboardItems = mutableStateListOf<ClipboardItem>()
+
+    private fun updateClipboardRingBuffer() {
         try {
-            val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+            val clipboard = getSystemService(ClipboardManager::class.java)
             val clipData = clipboard?.primaryClip
-            currentClipboardText = if (clipData != null && clipData.itemCount > 0) {
-                clipData.getItemAt(0)?.coerceToText(this)?.toString()?.trim() ?: ""
-            } else ""
+            if (clipData != null && clipData.itemCount > 0) {
+                val text = clipData.getItemAt(0)?.coerceToText(this)?.toString()?.trim() ?: ""
+                if (text.isNotBlank()) {
+                    currentClipboardText = text
+                    var isSensitive = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        isSensitive = clipData.description.extras?.getBoolean(ClipDescription.EXTRA_IS_SENSITIVE, false) ?: false
+                    }
+                    if (clipboardItems.none { it.text == text }) {
+                        clipboardItems.add(0, ClipboardItem(text = text, isSensitive = isSensitive))
+                        if (clipboardItems.size > 20) {
+                            val unpinnedIdx = clipboardItems.indexOfLast { !it.isPinned }
+                            if (unpinnedIdx != -1) clipboardItems.removeAt(unpinnedIdx)
+                        }
+                    }
+                }
+            }
         } catch (e: Exception) {
-            currentClipboardText = ""
+            android.util.Log.e("OwnVoiceIME", "updateClipboardRingBuffer error", e)
         }
     }
 
     private fun pasteClipboard() {
         try {
-            val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+            val clipboard = getSystemService(ClipboardManager::class.java)
             val clipData = clipboard?.primaryClip
             val clipText = if (clipData != null && clipData.itemCount > 0) {
                 clipData.getItemAt(0)?.coerceToText(this)?.toString() ?: ""
@@ -139,8 +166,25 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         geminiClient = GeminiRestClient(app.secureConfig)
         snippetEngine = SnippetEngine(app.secureConfig)
         bridgeClient = BridgeClient(app.secureConfig, this)
+        personalLexicon = PersonalLexiconManager(this)
         isBridgeActive = app.secureConfig.isUseForPcEnabled && app.secureConfig.desktopBridgeIp.isNotBlank()
         vibrator = getSystemService(Vibrator::class.java)
+
+        // Load pinned clips from SecureConfig
+        app.secureConfig.getPinnedClips().forEach { pinnedText ->
+            clipboardItems.add(ClipboardItem(text = pinnedText, isPinned = true))
+        }
+        updateClipboardRingBuffer()
+
+        // Register system clipboard primary clip listener
+        try {
+            val clipboard = getSystemService(ClipboardManager::class.java)
+            clipboard?.addPrimaryClipChangedListener {
+                updateClipboardRingBuffer()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("OwnVoiceIME", "Clipboard listener error", e)
+        }
 
         // Observe amplitude flow for live waveform & Auto VAD
         serviceScope.launch {
@@ -161,9 +205,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
     }
 
     override fun onEvaluateFullscreenMode(): Boolean = false
-
     override fun onEvaluateInputViewShown(): Boolean = true
-
     override fun onShowInputRequested(flags: Int, configChange: Boolean): Boolean = true
 
     override fun onCreateInputView(): View {
@@ -204,9 +246,18 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         snippets = app.secureConfig.getSnippets(),
                         lastInjectedText = lastInjectedText,
                         clipboardText = currentClipboardText,
+                        clipboardItems = clipboardItems,
+                        layoutMode = currentLayoutMode,
+                        actionKeyType = currentActionKeyType,
                         isBridgeActive = isBridgeActive,
                         isAutoVadActive = isAutoVadActive,
                         desktopBridgeIp = app.secureConfig.desktopBridgeIp,
+                        pcClipboardText = bridgeClient.latestPcClipboardText.collectAsState().value,
+                        bridgeClient = bridgeClient,
+                        onPastePcClipboard = { textToPaste ->
+                            currentInputConnection?.commitText(textToPaste, 1)
+                            performHaptic()
+                        },
                         onPasteClick = { pasteClipboard() },
                         onToggleRecording = { 
                             try {
@@ -240,6 +291,9 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 }
                                 lastInjectedLength = 0
                                 lastInjectedText = ""
+                                if (isBridgeActive && app.secureConfig.isPcAirTypingEnabled) {
+                                    bridgeClient.enqueueKeystroke(KeystrokeEvent(KeystrokeType.CLEAR, ""))
+                                }
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onClearClick error", e)
@@ -248,6 +302,9 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         onNewLineClick = {
                             try {
                                 currentInputConnection?.commitText("\n", 1)
+                                if (isBridgeActive && app.secureConfig.isPcAirTypingEnabled) {
+                                    bridgeClient.enqueueEnter()
+                                }
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onNewLineClick error", e)
@@ -279,7 +336,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 app.secureConfig.isUseForPcEnabled = isBridgeActive
                                 performHaptic()
                                 val displayName = app.secureConfig.desktopBridgeName.ifBlank { pcIp }
-                                statusMessage = if (isBridgeActive) "PC Bridge ON: $displayName" else "PC Bridge OFF"
+                                statusMessage = if (isBridgeActive) "PC Air-Typing ON: $displayName" else "PC Bridge OFF"
                             }
                         },
                         onToggleAutoVad = {
@@ -314,7 +371,11 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                     if (!selected.isNullOrEmpty()) {
                                         ic.commitText("", 1)
                                     } else {
-                                        val deleted = ic.deleteSurroundingText(1, 0)
+                                        val deleted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                            ic.deleteSurroundingTextInCodePoints(1, 0)
+                                        } else {
+                                            ic.deleteSurroundingText(1, 0)
+                                        }
                                         if (!deleted) {
                                             sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
                                         }
@@ -323,6 +384,10 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                     sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
                                 }
                                 if (lastInjectedLength > 0) lastInjectedLength--
+
+                                if (isBridgeActive && app.secureConfig.isPcAirTypingEnabled) {
+                                    bridgeClient.enqueueBackspace()
+                                }
 
                                 val now = SystemClock.uptimeMillis()
                                 if (now - lastBackspaceHapticTime >= 70L) {
@@ -335,10 +400,16 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         },
                         onEnterClick = {
                             sendAction()
+                            if (isBridgeActive && app.secureConfig.isPcAirTypingEnabled) {
+                                bridgeClient.enqueueEnter()
+                            }
                         },
                         onSpaceClick = {
                             try {
                                 currentInputConnection?.commitText(" ", 1)
+                                if (isBridgeActive && app.secureConfig.isPcAirTypingEnabled) {
+                                    bridgeClient.enqueueSpace()
+                                }
                                 performHaptic()
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onSpaceClick error", e)
@@ -375,6 +446,9 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                         onTypeChar = { char ->
                             try {
                                 currentInputConnection?.commitText(char, 1)
+                                if (isBridgeActive && app.secureConfig.isPcAirTypingEnabled) {
+                                    bridgeClient.enqueueChar(char)
+                                }
                                 performHaptic()
                                 if (keyboardState == KeyboardState.RESULT) {
                                     dismissJob?.cancel()
@@ -382,6 +456,46 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.e("OwnVoiceIME", "onTypeChar error", e)
+                            }
+                        },
+                        onSpacebarGlide = { stepDelta ->
+                            handleSpacebarGlide(stepDelta)
+                        },
+                        onBackspaceScrub = { wordCount ->
+                            handleBackspaceScrub(wordCount)
+                        },
+                        onBackspaceScrubCommit = { wordCount ->
+                            handleBackspaceScrubCommit(wordCount)
+                        },
+                        onWandTransform = { optionId ->
+                            executeMagicWand(optionId)
+                        },
+                        onTogglePinClip = { clipId ->
+                            val item = clipboardItems.find { it.id == clipId }
+                            if (item != null) {
+                                val idx = clipboardItems.indexOf(item)
+                                clipboardItems[idx] = item.copy(isPinned = !item.isPinned)
+                                val pinnedTexts = clipboardItems.filter { it.isPinned }.map { it.text }
+                                app.secureConfig.savePinnedClips(pinnedTexts)
+                                performHaptic()
+                            }
+                        },
+                        onDeleteClip = { clipId ->
+                            clipboardItems.removeAll { it.id == clipId }
+                            val pinnedTexts = clipboardItems.filter { it.isPinned }.map { it.text }
+                            app.secureConfig.savePinnedClips(pinnedTexts)
+                            performHaptic()
+                        },
+                        onSendClipToPc = { clipText ->
+                            if (isBridgeActive) {
+                                val pcIp = app.secureConfig.desktopBridgeIp
+                                if (pcIp.isNotBlank()) {
+                                    serviceScope.launch {
+                                        bridgeClient.sendToDesktop(pcIp, clipText, token = app.secureConfig.desktopBridgeToken)
+                                    }
+                                    performHaptic()
+                                    statusMessage = "Sent clip to PC"
+                                }
                             }
                         }
                     )
@@ -407,6 +521,34 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
 
         val app = application as OwnVoiceApplication
         isBridgeActive = app.secureConfig.isUseForPcEnabled && app.secureConfig.desktopBridgeIp.isNotBlank()
+
+        // Adaptive InputType Detection
+        val inputType = info?.inputType ?: 0
+        val inputClass = inputType and EditorInfo.TYPE_MASK_CLASS
+        val inputVariation = inputType and EditorInfo.TYPE_MASK_VARIATION
+
+        currentLayoutMode = when {
+            inputClass == EditorInfo.TYPE_CLASS_NUMBER ||
+            inputClass == EditorInfo.TYPE_CLASS_PHONE ||
+            inputVariation == EditorInfo.TYPE_NUMBER_VARIATION_PASSWORD -> KeyboardLayoutMode.NUMERIC_PAD
+
+            inputVariation == EditorInfo.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+            inputVariation == EditorInfo.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS -> KeyboardLayoutMode.EMAIL
+
+            else -> KeyboardLayoutMode.QWERTY
+        }
+
+        // Adaptive Action Key Detection
+        val action = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
+        currentActionKeyType = when (action) {
+            EditorInfo.IME_ACTION_SEARCH -> ActionKeyType.SEARCH
+            EditorInfo.IME_ACTION_SEND -> ActionKeyType.SEND
+            EditorInfo.IME_ACTION_GO -> ActionKeyType.GO
+            EditorInfo.IME_ACTION_NEXT -> ActionKeyType.NEXT
+            EditorInfo.IME_ACTION_DONE -> ActionKeyType.DONE
+            else -> ActionKeyType.ENTER
+        }
+
         val targetPkg = info?.packageName ?: ""
         currentEffectiveTone = if (app.secureConfig.isAutoContextToneEnabled && targetPkg.isNotBlank()) {
             TonePromptManager.detectModeForPackage(targetPkg)
@@ -419,7 +561,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         statusMessage = ""
         lastInjectedLength = 0
         lastInjectedText = ""
-        updateClipboardPreview()
+        updateClipboardRingBuffer()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -434,6 +576,149 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
         if (audioRecorder.isCurrentlyRecording()) {
             audioRecorder.cancelRecording()
             keyboardState = KeyboardState.IDLE
+        }
+    }
+
+    private fun handleSpacebarGlide(stepDelta: Int) {
+        try {
+            val ic = currentInputConnection ?: return
+            if (stepDelta < 0) {
+                val textBefore = ic.getTextBeforeCursor(1000, 0)
+                if (!textBefore.isNullOrEmpty()) {
+                    val newPos = (textBefore.length + stepDelta).coerceAtLeast(0)
+                    ic.setSelection(newPos, newPos)
+                } else {
+                    sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
+                }
+            } else if (stepDelta > 0) {
+                val textBefore = ic.getTextBeforeCursor(1000, 0) ?: ""
+                val textAfter = ic.getTextAfterCursor(1000, 0) ?: ""
+                val totalLength = textBefore.length + textAfter.length
+                val newPos = (textBefore.length + stepDelta).coerceAtMost(totalLength)
+                ic.setSelection(newPos, newPos)
+            }
+            performHaptic(light = true)
+        } catch (e: Exception) {
+            if (stepDelta < 0) sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_LEFT)
+            else sendDownUpKeyEvents(KeyEvent.KEYCODE_DPAD_RIGHT)
+        }
+    }
+
+    private fun handleBackspaceScrub(wordCount: Int) {
+        try {
+            val ic = currentInputConnection ?: return
+            val textBefore = ic.getTextBeforeCursor(600, 0)?.toString() ?: ""
+            if (wordCount <= 0) {
+                // Restore cursor to end
+                ic.setSelection(textBefore.length, textBefore.length)
+            } else {
+                if (textBefore.isNotEmpty()) {
+                    val tokens = textBefore.trimEnd().split(Regex("\\s+"))
+                    val wordsToSelect = tokens.takeLast(wordCount).joinToString(" ")
+                    val selectLen = minOf(textBefore.length, wordsToSelect.length + (textBefore.length - textBefore.trimEnd().length))
+                    val startPos = textBefore.length - selectLen
+                    ic.setSelection(startPos, textBefore.length)
+                    performHaptic(light = true)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("OwnVoiceIME", "handleBackspaceScrub error", e)
+        }
+    }
+
+    private fun handleBackspaceScrubCommit(wordCount: Int) {
+        try {
+            val ic = currentInputConnection ?: return
+            ic.commitText("", 1)
+            performHaptic(light = false)
+            if (isBridgeActive) {
+                val app = application as OwnVoiceApplication
+                if (app.secureConfig.isPcAirTypingEnabled) {
+                    for (i in 0 until wordCount) {
+                        bridgeClient.enqueueBackspace()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("OwnVoiceIME", "handleBackspaceScrubCommit error", e)
+        }
+    }
+
+    private fun executeMagicWand(optionId: String) {
+        val ic = currentInputConnection
+        val selectedText = ic?.getSelectedText(0)?.toString()
+        val textBefore = ic?.getTextBeforeCursor(500, 0)?.toString()?.trim()
+
+        val textToTransform = when {
+            !selectedText.isNullOrBlank() -> selectedText
+            !textBefore.isNullOrBlank() -> textBefore
+            lastInjectedText.isNotBlank() -> lastInjectedText
+            else -> ""
+        }
+
+        if (textToTransform.isBlank()) {
+            statusMessage = "Type or select text first!"
+            performHaptic()
+            return
+        }
+
+        performHaptic()
+        keyboardState = KeyboardState.PROCESSING
+        statusMessage = "Polishing with Gemini…"
+
+        val instruction = when (optionId) {
+            "fix" -> "Fix any spelling, grammar, punctuation, and typographical mistakes while preserving the exact original meaning and tone."
+            "executive" -> "Rewrite the following text into polished, confident, professional executive business language suitable for email or workplace communication."
+            "shorter" -> "Condense and summarize the following text into a punchy, crisp, and concise version without losing essential information."
+            "translate_hindi" -> "Translate the text accurately between Hindi and English, keeping natural conversational nuances."
+            "bullets" -> "Convert the following text into clear, structured, well-formatted bullet points."
+            "casual" -> "Rewrite the following text into a warm, natural, friendly conversational chat tone."
+            else -> "Improve clarity, tone, and flow."
+        }
+
+        serviceScope.launch {
+            try {
+                val (newText, _) = geminiClient.reshapeText(textToTransform, instruction)
+                if (newText.isNotBlank()) {
+                    ic?.beginBatchEdit()
+                    if (!selectedText.isNullOrBlank()) {
+                        ic.commitText(newText, 1)
+                    } else if (!textBefore.isNullOrBlank()) {
+                        ic.deleteSurroundingText(textToTransform.length, 0)
+                        ic.commitText(newText, 1)
+                    } else {
+                        ic.commitText(newText, 1)
+                    }
+                    ic?.endBatchEdit()
+
+                    lastInjectedText = newText
+                    lastInjectedLength = newText.length
+                    personalLexicon.recordTextUsage(newText)
+
+                    if (isBridgeActive) {
+                        val app = application as OwnVoiceApplication
+                        val pcIp = app.secureConfig.desktopBridgeIp
+                        if (pcIp.isNotBlank()) {
+                            serviceScope.launch {
+                                bridgeClient.sendToDesktop(pcIp, newText, token = app.secureConfig.desktopBridgeToken)
+                            }
+                        }
+                    }
+
+                    performHaptic()
+                    keyboardState = KeyboardState.IDLE
+                    statusMessage = "Polished with Gemini ✨"
+                    delay(2500)
+                    if (statusMessage == "Polished with Gemini ✨") statusMessage = ""
+                } else {
+                    keyboardState = KeyboardState.IDLE
+                }
+            } catch (e: Exception) {
+                keyboardState = KeyboardState.ERROR
+                statusMessage = e.localizedMessage ?: "Wand error"
+                delay(3000)
+                keyboardState = KeyboardState.IDLE
+            }
         }
     }
 
@@ -454,7 +739,6 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
             return
         }
 
-        // Verify microphone permission
         val hasMic = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         if (!hasMic) {
             keyboardState = KeyboardState.ERROR
@@ -492,7 +776,11 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
             }
 
             try {
-                val (text, latency) = geminiClient.transcribeAudio(wavBytes, mode = currentEffectiveTone)
+                val (text, latency) = geminiClient.transcribeAudio(
+                    wavBytes,
+                    mode = currentEffectiveTone,
+                    personalLexicon = personalLexicon.getTopVocabulary()
+                )
                 val rawTrimmed = text.trim()
                 val normalizedCmd = rawTrimmed.lowercase().removeSuffix(".").removeSuffix("!")
 
@@ -535,6 +823,7 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                     currentInputConnection?.commitText(expanded, 1)
                     lastInjectedLength = expanded.length
                     lastInjectedText = expanded
+                    personalLexicon.recordTextUsage(expanded)
 
                     if (isBridgeActive) {
                         val app = application as OwnVoiceApplication
@@ -556,7 +845,6 @@ class OwnVoiceInputMethodService : InputMethodService(), LifecycleOwner, ViewMod
                     keyboardState = KeyboardState.RESULT
                     statusMessage = if (isBridgeActive) "Typed to PC & Phone" else ""
 
-                    // Smooth auto-dismiss after 10s back to IDLE
                     dismissJob?.cancel()
                     dismissJob = serviceScope.launch {
                         delay(10000)

@@ -48,6 +48,15 @@ class SecureConfig(context: Context) {
         private const val KEY_SILENCE_DETECTION = "silence_detection_seconds"
         private const val KEY_CONTINUOUS_LISTENING = "continuous_listening"
         private const val KEY_VOICE_COMMANDS = "voice_commands_enabled"
+        private const val KEY_PC_AIR_TYPING = "pc_air_typing_enabled"
+        private const val KEY_SPACEBAR_GLIDE = "spacebar_glide_enabled"
+        private const val KEY_BACKSPACE_SWIPE = "backspace_swipe_enabled"
+        private const val KEY_PINNED_CLIPS_JSON = "pinned_clips_json"
+        private const val KEY_CLOUD_RELAY_ENABLED = "cloud_relay_enabled"
+        private const val KEY_CLOUD_RELAY_URL = "cloud_relay_url"
+        private const val KEY_TWO_WAY_CLIPBOARD = "two_way_clipboard_enabled"
+        private const val KEY_TRACKPAD_SENSITIVITY = "trackpad_sensitivity"
+        private const val KEY_RELAY_ROOM_TOKEN = "relay_room_token"
     }
 
     val isDefaultOrBlankApiKey: Boolean
@@ -106,6 +115,58 @@ class SecureConfig(context: Context) {
     var isVoiceCommandsEnabled: Boolean
         get() = prefs.getBoolean(KEY_VOICE_COMMANDS, true)
         set(value) = prefs.edit().putBoolean(KEY_VOICE_COMMANDS, value).apply()
+
+    var isPcAirTypingEnabled: Boolean
+        get() = prefs.getBoolean(KEY_PC_AIR_TYPING, true)
+        set(value) = prefs.edit().putBoolean(KEY_PC_AIR_TYPING, value).apply()
+
+    var isSpacebarGlideEnabled: Boolean
+        get() = prefs.getBoolean(KEY_SPACEBAR_GLIDE, true)
+        set(value) = prefs.edit().putBoolean(KEY_SPACEBAR_GLIDE, value).apply()
+
+    var isBackspaceSwipeEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BACKSPACE_SWIPE, true)
+        set(value) = prefs.edit().putBoolean(KEY_BACKSPACE_SWIPE, value).apply()
+
+    var isCloudRelayEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CLOUD_RELAY_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_CLOUD_RELAY_ENABLED, value).apply()
+
+    var cloudRelayUrl: String
+        get() = prefs.getString(KEY_CLOUD_RELAY_URL, "ws://10.0.2.2:8767/ws") ?: "ws://10.0.2.2:8767/ws"
+        set(value) = prefs.edit().putString(KEY_CLOUD_RELAY_URL, value.trim()).apply()
+
+    var isTwoWayClipboardEnabled: Boolean
+        get() = prefs.getBoolean(KEY_TWO_WAY_CLIPBOARD, true)
+        set(value) = prefs.edit().putBoolean(KEY_TWO_WAY_CLIPBOARD, value).apply()
+
+    var trackpadSensitivity: Float
+        get() = prefs.getFloat(KEY_TRACKPAD_SENSITIVITY, 1.2f)
+        set(value) = prefs.edit().putFloat(KEY_TRACKPAD_SENSITIVITY, value).apply()
+
+    var relayRoomToken: String
+        get() = prefs.getString(KEY_RELAY_ROOM_TOKEN, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_RELAY_ROOM_TOKEN, value.trim()).apply()
+
+    fun getPinnedClips(): List<String> {
+        val jsonStr = prefs.getString(KEY_PINNED_CLIPS_JSON, "[]") ?: "[]"
+        return try {
+            val arr = JSONArray(jsonStr)
+            val list = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                list.add(arr.getString(i))
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun savePinnedClips(clips: List<String>) {
+        val arr = JSONArray()
+        clips.forEach { arr.put(it) }
+        prefs.edit().putString(KEY_PINNED_CLIPS_JSON, arr.toString()).apply()
+    }
 
     var gistToken: String
         get() = prefs.getString(KEY_GIST_TOKEN, "") ?: ""

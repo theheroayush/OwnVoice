@@ -17,8 +17,8 @@ if ENV_FILE.exists():
     load_dotenv(ENV_FILE)
 
 DEFAULT_CONFIG = {
-    "google_api_key": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "AQ.Ab8RN6JVp6KVzuryq8BuUZLBYBuUJCNqwECacgdSMUegi5EblA",
-    "model": "gemini-2.5-flash",
+    "google_api_key": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "",
+    "model": "gemini-3.6-flash",
     "hotkey": "f8",
     "hotkey_mode": "toggle",
     "dictation_mode": "smart_flow",
@@ -32,7 +32,7 @@ DEFAULT_CONFIG = {
     ],
     "custom_instructions": "",
     "sound_effects": True,
-    "input_device_index": 9,
+    "input_device_index": None,
     "sample_rate": 48000,
     "overlay_position": "bottom_center",
     "auto_paste": True,

@@ -41,24 +41,12 @@ fun SettingsScreen(
     val defaultIme = Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: ""
     val isOwnVoiceActiveIme = defaultIme.contains("ownvoice", ignoreCase = true)
 
-    Scaffold(
-        containerColor = DesignTokens.Colors.BackgroundDark,
-        bottomBar = {
-            BottomNavBar(
-                currentDestination = ScreenDestination.SettingsHub,
-                onNavigate = onNavigate,
-                showCenterMic = true,
-                onCenterMicClick = { onNavigate(ScreenDestination.Home) }
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
             // Header
             item {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -407,5 +395,4 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
-    }
 }

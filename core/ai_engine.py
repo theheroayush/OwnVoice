@@ -88,7 +88,11 @@ class AIEngine:
     def __init__(self, config_manager):
         self.config = config_manager
         saved_model = self.config.get("model", "gemini-3.6-flash")
-        if saved_model in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-2.5-flash-lite"]:
+        deprecated_models = {
+            "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash",
+            "gemini-2.0-flash-lite", "gemini-1.5-pro"
+        }
+        if not saved_model or saved_model in deprecated_models:
             saved_model = "gemini-3.6-flash"
             self.config.set("model", "gemini-3.6-flash", save=True)
         self.working_model = saved_model
@@ -120,7 +124,7 @@ class AIEngine:
             return ""
         return text
 
-    def transcribe_audio(self, audio_wav_bytes: bytes, mode: str = None) -> Tuple[str, float]:
+    def transcribe_audio(self, audio_wav_bytes: bytes, mode: str = None, selection_context: str = None) -> Tuple[str, float]:
         start_time = time.time()
 
         if not audio_wav_bytes or len(audio_wav_bytes) < 1000:
@@ -134,6 +138,14 @@ class AIEngine:
             mode = self.config.get("dictation_mode", "smart_flow")
 
         system_instruction = DICTATION_PROMPTS.get(mode, DICTATION_PROMPTS["smart_flow"])
+
+        # Contextual On-Screen Selection Transformation
+        if selection_context and selection_context.strip():
+            system_instruction += (
+                f"\n\nCURRENT ON-SCREEN SELECTION CONTEXT:\n\"\"\"\n{selection_context.strip()}\n\"\"\"\n"
+                "The user's spoken words are an instruction to transform, rewrite, summarize, or reply to this selected text. "
+                "Output ONLY the transformed result ready to replace the selection with zero conversational commentary."
+            )
 
         # Mid-Sentence Self-Correction & Spoken Commands (Version 2.0+)
         if self.config.get("self_correction", True):
@@ -183,7 +195,7 @@ class AIEngine:
             }
 
             try:
-                response = self.session.post(url, json=payload, timeout=12)
+                response = self.session.post(url, json=payload, timeout=15)
                 latency = time.time() - start_time
 
                 if response.status_code == 200:
@@ -199,28 +211,34 @@ class AIEngine:
                             return cleaned, latency
                     return "", latency
                 elif response.status_code == 404:
+                    last_error = f"Gemini model '{model}' unavailable (HTTP 404)"
                     continue
                 elif response.status_code in (401, 403):
-                    raise ValueError("Invalid Google AI Studio API Key. Please verify your key.")
+                    raise ValueError("Invalid Google AI Studio API Key. Please verify your key in Settings.")
                 elif response.status_code == 429:
                     last_error = f"Gemini API Quota Exceeded (HTTP 429): {response.text[:150]}"
+                    continue
+                elif response.status_code == 503:
+                    last_error = f"Gemini model '{model}' busy (HTTP 503)"
                     continue
                 else:
                     last_error = f"API Error ({response.status_code}): {response.text[:150]}"
             except requests.exceptions.Timeout:
+                last_error = f"Request timed out for model '{model}'"
                 continue
             except ValueError:
                 raise
             except Exception as e:
                 last_error = str(e)
 
-        # Automatic Zero-Latency Offline Fallback
-        try:
-            offline_text, offline_latency = self.offline_engine.transcribe(audio_wav_bytes)
-            if offline_text:
-                return offline_text, offline_latency
-        except Exception:
-            pass
+        # Automatic Zero-Latency Offline Fallback (only if model actually downloaded)
+        if self.offline_engine.is_model_available():
+            try:
+                offline_text, offline_latency = self.offline_engine.transcribe(audio_wav_bytes)
+                if offline_text and offline_text.strip() and not offline_text.startswith("(Offline fallback"):
+                    return offline_text, offline_latency
+            except Exception as oe:
+                last_error = f"{last_error} | Offline fallback failed: {oe}"
 
         raise RuntimeError(last_error or "Unable to transcribe audio with Gemini models.")
 
@@ -232,6 +250,7 @@ class AIEngine:
 
         start_time = time.time()
         models_to_try = [self.working_model] + [m for m in FALLBACK_MODELS if m != self.working_model]
+        last_err = "Connection failed"
 
         for model in models_to_try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
@@ -241,7 +260,7 @@ class AIEngine:
             }
 
             try:
-                resp = self.session.post(url, json=payload, timeout=6)
+                resp = self.session.post(url, json=payload, timeout=8)
                 latency = time.time() - start_time
                 if resp.status_code == 200:
                     self.working_model = model
@@ -249,10 +268,19 @@ class AIEngine:
                     return True, f"Connected to {model}! ({int(latency * 1000)}ms)", latency
                 elif resp.status_code in (401, 403):
                     return False, "Invalid API Key. Please check your key.", latency
-            except Exception:
+                elif resp.status_code == 429:
+                    last_err = "Gemini API Quota Exceeded (HTTP 429)"
+                elif resp.status_code == 404:
+                    last_err = f"Model '{model}' not available (HTTP 404)"
+                elif resp.status_code == 503:
+                    last_err = f"Model '{model}' busy (HTTP 503)"
+                else:
+                    last_err = f"API Error ({resp.status_code})"
+            except Exception as e:
+                last_err = str(e)
                 continue
 
-        return False, "Connection test failed across Gemini models.", 0.0
+        return False, last_err, 0.0
 
     def test_key(self, api_key: str = None) -> Tuple[bool, str]:
         """Fast lightweight ping to Google AI Studio to validate an API key."""

@@ -39,7 +39,7 @@ class SnippetEngine:
         # Sort by trigger length descending to match longer phrases first
         for trigger, expansion in sorted(snippets.items(), key=lambda x: len(x[0]), reverse=True):
             clean_trig = trigger.strip()
-            if not clean_trig:
+            if not clean_trig or clean_trig.lower() not in text.lower():
                 continue
             # Symbol-safe lookaround assertion: prevents matching inside words, but supports c++, node.js, etc.
             pattern = re.compile(rf"(?<!\w){re.escape(clean_trig)}(?!\w)", re.IGNORECASE)

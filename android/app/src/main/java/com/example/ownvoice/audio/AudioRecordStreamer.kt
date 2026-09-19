@@ -30,11 +30,15 @@ class AudioRecordStreamer(
     private val pcmOutputStream = ByteArrayOutputStream()
 
     @SuppressLint("MissingPermission")
-    fun startRecording(onChunkAvailable: ((ByteArray) -> Unit)? = null): Boolean {
+    fun startRecording(
+        sensitivity: Float = 0.5f,
+        silenceDurationSeconds: Float = 0f,
+        onChunkAvailable: ((ByteArray) -> Unit)? = null,
+        onSilenceDetected: (() -> Unit)? = null
+    ): Boolean {
         if (isRecording.get()) return true
 
         try {
-            // Try VOICE_RECOGNITION first (enables hardware noise suppression & echo cancel), fallback to MIC
             var record: AudioRecord? = null
             try {
                 record = AudioRecord(
@@ -67,23 +71,44 @@ class AudioRecordStreamer(
             isRecording.set(true)
             audioRecord?.startRecording()
 
+            // Dynamic gain from sensitivity slider (0.0 to 1.0 -> 1.0x to 4.0x)
+            val dynamicGain = 1.0f + (sensitivity.coerceIn(0.0f, 1.0f) * 3.0f)
+
             recordingThread = Thread({
                 val buffer = ByteArray(bufferSize)
+                var hasSpoken = false
+                var silenceStartTime = 0L
+                val silenceThreshold = 400.0f // RMS threshold for silence
+
                 while (isRecording.get()) {
                     val readBytes = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                     if (readBytes > 0) {
-                        // Apply 3x digital Auto-Gain Control (AGC) with soft limiting for mobile microphones
-                        applyDynamicGain(buffer, readBytes, gainFactor = 2.5f)
+                        applyDynamicGain(buffer, readBytes, gainFactor = dynamicGain)
 
                         synchronized(pcmOutputStream) {
                             pcmOutputStream.write(buffer, 0, readBytes)
                         }
 
-                        // Calculate RMS amplitude for visualizer
                         val rms = calculateRms(buffer, readBytes)
                         _amplitudeFlow.value = (rms / 20000.0f).coerceIn(0.0f, 1.0f)
 
-                        // Dispatch streaming chunk if listener attached
+                        // VAD / Silence detection
+                        if (silenceDurationSeconds > 0.5f && onSilenceDetected != null) {
+                            if (rms > silenceThreshold * 1.5f) {
+                                hasSpoken = true
+                                silenceStartTime = 0L
+                            } else if (hasSpoken) {
+                                val now = System.currentTimeMillis()
+                                if (silenceStartTime == 0L) {
+                                    silenceStartTime = now
+                                } else if (now - silenceStartTime >= (silenceDurationSeconds * 1000).toLong()) {
+                                    // Trigger silence stop callback on separate thread
+                                    onSilenceDetected.invoke()
+                                    break
+                                }
+                            }
+                        }
+
                         onChunkAvailable?.invoke(buffer.copyOf(readBytes))
                     }
                 }

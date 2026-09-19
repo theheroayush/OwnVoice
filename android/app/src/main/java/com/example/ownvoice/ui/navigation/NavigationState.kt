@@ -13,4 +13,5 @@ sealed class ScreenDestination {
     data object SnippetsManager : ScreenDestination()
     data object HistoryPrivacy : ScreenDestination()
     data object AdvancedSettings : ScreenDestination()
+    data object MeetingMode : ScreenDestination()
 }

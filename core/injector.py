@@ -5,14 +5,27 @@ import subprocess
 import ctypes
 from typing import Optional
 from pynput.keyboard import Controller, Key
+from pynput.mouse import Controller as MouseController, Button as MouseButton
 
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
 IS_LINUX = sys.platform.startswith("linux")
 
 kb = Controller()
+mouse_ctrl = MouseController()
 
+INPUT_MOUSE = 0
 INPUT_KEYBOARD = 1
+MOUSEEVENTF_MOVE = 0x0001
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP = 0x0010
+MOUSEEVENTF_MIDDLEDOWN = 0x0020
+MOUSEEVENTF_MIDDLEUP = 0x0040
+MOUSEEVENTF_WHEEL = 0x0800
+MOUSEEVENTF_ABSOLUTE = 0x8000
+
 VK_CONTROL = 0x11
 VK_V = 0x56
 VK_MENU = 0x12
@@ -119,6 +132,8 @@ if IS_WINDOWS and hasattr(ctypes, "WinDLL"):
     user32.ShowWindow.restype = wintypes.BOOL
     user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
     user32.keybd_event.restype = None
+    user32.GetClipboardSequenceNumber.argtypes = []
+    user32.GetClipboardSequenceNumber.restype = wintypes.DWORD
     kernel32.GetCurrentThreadId.argtypes = []
     kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 else:
@@ -515,3 +530,120 @@ class CursorInjector:
             self.set_clipboard_text(orig_clip)
 
         return True
+
+    def move_mouse(self, dx: int, dy: int) -> bool:
+        """Moves mouse relative to current position with hardware-level SendInput on Windows."""
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            try:
+                inp = INPUT()
+                inp.type = INPUT_MOUSE
+                inp.mi = MOUSEINPUT(dx=int(dx), dy=int(dy), mouseData=0, dwFlags=MOUSEEVENTF_MOVE, time=0, dwExtraInfo=0)
+                sent = user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+                return sent > 0
+            except Exception:
+                pass
+        try:
+            mouse_ctrl.move(int(dx), int(dy))
+            return True
+        except Exception:
+            return False
+
+    def mouse_click(self, button: str = "left", double: bool = False) -> bool:
+        """Executes a left, right, or middle mouse click (or double click)."""
+        btn = button.lower()
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            try:
+                down_flag = MOUSEEVENTF_LEFTDOWN if btn == "left" else (MOUSEEVENTF_RIGHTDOWN if btn == "right" else MOUSEEVENTF_MIDDLEDOWN)
+                up_flag = MOUSEEVENTF_LEFTUP if btn == "left" else (MOUSEEVENTF_RIGHTUP if btn == "right" else MOUSEEVENTF_MIDDLEUP)
+
+                inp_down = INPUT()
+                inp_down.type = INPUT_MOUSE
+                inp_down.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=down_flag, time=0, dwExtraInfo=0)
+
+                inp_up = INPUT()
+                inp_up.type = INPUT_MOUSE
+                inp_up.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=up_flag, time=0, dwExtraInfo=0)
+
+                user32.SendInput(1, ctypes.byref(inp_down), ctypes.sizeof(INPUT))
+                time.sleep(0.015)
+                user32.SendInput(1, ctypes.byref(inp_up), ctypes.sizeof(INPUT))
+
+                if double:
+                    time.sleep(0.04)
+                    user32.SendInput(1, ctypes.byref(inp_down), ctypes.sizeof(INPUT))
+                    time.sleep(0.015)
+                    user32.SendInput(1, ctypes.byref(inp_up), ctypes.sizeof(INPUT))
+                return True
+            except Exception:
+                pass
+        try:
+            p_btn = MouseButton.left if btn == "left" else (MouseButton.right if btn == "right" else MouseButton.middle)
+            mouse_ctrl.click(p_btn, 2 if double else 1)
+            return True
+        except Exception:
+            return False
+
+    def mouse_down(self, button: str = "left") -> bool:
+        """Holds down the specified mouse button (drag initiation)."""
+        btn = button.lower()
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            try:
+                down_flag = MOUSEEVENTF_LEFTDOWN if btn == "left" else (MOUSEEVENTF_RIGHTDOWN if btn == "right" else MOUSEEVENTF_MIDDLEDOWN)
+                inp = INPUT()
+                inp.type = INPUT_MOUSE
+                inp.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=down_flag, time=0, dwExtraInfo=0)
+                return user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT)) > 0
+            except Exception:
+                pass
+        try:
+            p_btn = MouseButton.left if btn == "left" else (MouseButton.right if btn == "right" else MouseButton.middle)
+            mouse_ctrl.press(p_btn)
+            return True
+        except Exception:
+            return False
+
+    def mouse_up(self, button: str = "left") -> bool:
+        """Releases the specified mouse button (drag completion)."""
+        btn = button.lower()
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            try:
+                up_flag = MOUSEEVENTF_LEFTUP if btn == "left" else (MOUSEEVENTF_RIGHTUP if btn == "right" else MOUSEEVENTF_MIDDLEUP)
+                inp = INPUT()
+                inp.type = INPUT_MOUSE
+                inp.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=up_flag, time=0, dwExtraInfo=0)
+                return user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT)) > 0
+            except Exception:
+                pass
+        try:
+            p_btn = MouseButton.left if btn == "left" else (MouseButton.right if btn == "right" else MouseButton.middle)
+            mouse_ctrl.release(p_btn)
+            return True
+        except Exception:
+            return False
+
+    def mouse_scroll(self, delta: int) -> bool:
+        """Scrolls vertically (positive delta = scroll up, negative delta = scroll down)."""
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL):
+            try:
+                wheel_amount = int(delta * 120) if abs(delta) <= 10 else int(delta)
+                inp = INPUT()
+                inp.type = INPUT_MOUSE
+                inp.mi = MOUSEINPUT(dx=0, dy=0, mouseData=wheel_amount, dwFlags=MOUSEEVENTF_WHEEL, time=0, dwExtraInfo=0)
+                return user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT)) > 0
+            except Exception:
+                pass
+        try:
+            mouse_ctrl.scroll(0, delta)
+            return True
+        except Exception:
+            return False
+
+    def get_clipboard_seq(self) -> int:
+        """Gets Windows clipboard sequence counter to detect updates without locking clipboard."""
+        if IS_WINDOWS and not isinstance(user32, _DummyWinDLL) and hasattr(user32, "GetClipboardSequenceNumber"):
+            try:
+                return user32.GetClipboardSequenceNumber()
+            except Exception:
+                pass
+        return 0
+

@@ -82,57 +82,8 @@ fun BehaviorSettingsScreen(
                         color = DesignTokens.Colors.TextPrimary
                     )
                     Text(
-                        text = "Your voice, everywhere",
+                        text = "Voice Behavior",
                         fontSize = 10.sp,
-                        color = DesignTokens.Colors.TextSubtle
-                    )
-                }
-            }
-        },
-        bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DesignTokens.Colors.BackgroundDark)
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Button(
-                    onClick = {
-                        app.secureConfig.isSelfCorrectionEnabled = autoCorrection
-                        app.secureConfig.isAutoContextToneEnabled = contextAwareness
-                        app.secureConfig.isSoundEffectsEnabled = audioFeedback
-                        app.secureConfig.isHapticFeedbackEnabled = hapticFeedback
-                        app.secureConfig.silenceDetectionSeconds = silenceDuration
-                        app.secureConfig.isContinuousListening = continuousListening
-                        app.secureConfig.isVoiceCommandsEnabled = useVoiceCommands
-                        Toast.makeText(context, "Behavior settings saved", Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.PrimaryBlue),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                ) {
-                    Text(
-                        text = "Save Changes",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Info",
-                        tint = DesignTokens.Colors.TextSubtle,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "These settings will apply immediately.",
-                        fontSize = 11.sp,
                         color = DesignTokens.Colors.TextSubtle
                     )
                 }
@@ -157,17 +108,17 @@ fun BehaviorSettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Fine-tune how OwnVoice listens, understands and responds to your voice.",
+                    text = "Fine-tune how OwnVoice listens, auto-corrects, and detects speech pauses.",
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = DesignTokens.Colors.TextMuted
                 )
             }
 
-            // Group 1: TRANSCRIPTION
+            // Group 1: TRANSCRIPTION & CORRECTION
             item {
                 Text(
-                    text = "TRANSCRIPTION",
+                    text = "TRANSCRIPTION & CORRECTION",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = DesignTokens.Colors.TextSubtle,
@@ -186,12 +137,15 @@ fun BehaviorSettingsScreen(
                         // Auto Correction
                         SwitchRow(
                             title = "Auto Correction",
-                            subtitle = "Automatically fix grammar, punctuation and minor mistakes.",
+                            subtitle = "Automatically fix grammar, punctuation and minor slip-ups.",
                             icon = Icons.Default.AutoAwesome,
                             iconBg = Color(0xFF0F766E).copy(alpha = 0.5f),
                             iconTint = Color(0xFF2DD4BF),
                             checked = autoCorrection,
-                            onCheckedChange = { autoCorrection = it }
+                            onCheckedChange = {
+                                autoCorrection = it
+                                app.secureConfig.isSelfCorrectionEnabled = it
+                            }
                         )
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DesignTokens.Colors.BorderSubtle, thickness = 0.5.dp)
@@ -199,12 +153,15 @@ fun BehaviorSettingsScreen(
                         // Context Awareness
                         SwitchRow(
                             title = "Context Awareness",
-                            subtitle = "Understands context, intent and previous conversation to give better results.",
+                            subtitle = "Understands app context (Slack vs Docs vs Email) to select appropriate formatting.",
                             icon = Icons.Default.Description,
                             iconBg = Color(0xFF1E3A8A).copy(alpha = 0.5f),
                             iconTint = DesignTokens.ElectricBlue,
                             checked = contextAwareness,
-                            onCheckedChange = { contextAwareness = it }
+                            onCheckedChange = {
+                                contextAwareness = it
+                                app.secureConfig.isAutoContextToneEnabled = it
+                            }
                         )
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DesignTokens.Colors.BorderSubtle, thickness = 0.5.dp)
@@ -212,21 +169,24 @@ fun BehaviorSettingsScreen(
                         // Spoken Self-Correction
                         SwitchRow(
                             title = "Spoken Self-Correction",
-                            subtitle = "Let you naturally say \"actually\" or \"correction\" to modify the last part.",
+                            subtitle = "Say \"actually\" or \"I mean\" mid-sentence to output only the final thought.",
                             icon = Icons.Default.GraphicEq,
                             iconBg = Color(0xFF581C87).copy(alpha = 0.5f),
                             iconTint = DesignTokens.PurpleAccent,
                             checked = spokenSelfCorrection,
-                            onCheckedChange = { spokenSelfCorrection = it }
+                            onCheckedChange = {
+                                spokenSelfCorrection = it
+                                app.secureConfig.isSelfCorrectionEnabled = it
+                            }
                         )
                     }
                 }
             }
 
-            // Group 2: AUDIO FEEDBACK
+            // Group 2: AUDIO & HAPTIC FEEDBACK
             item {
                 Text(
-                    text = "AUDIO FEEDBACK",
+                    text = "FEEDBACK & HAPTICS",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = DesignTokens.Colors.TextSubtle,
@@ -245,34 +205,40 @@ fun BehaviorSettingsScreen(
                         // Audio Feedback
                         SwitchRow(
                             title = "Audio Feedback",
-                            subtitle = "Play subtle sounds for start, stop and completion.",
+                            subtitle = "Play subtle chime when dictation starts and stops.",
                             icon = Icons.Default.VolumeUp,
                             iconBg = Color(0xFFC2410C).copy(alpha = 0.5f),
                             iconTint = Color(0xFFFB923C),
                             checked = audioFeedback,
-                            onCheckedChange = { audioFeedback = it }
+                            onCheckedChange = {
+                                audioFeedback = it
+                                app.secureConfig.isSoundEffectsEnabled = it
+                            }
                         )
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DesignTokens.Colors.BorderSubtle, thickness = 0.5.dp)
 
                         // Haptic Feedback
                         SwitchRow(
-                            title = "Haptic Feedback",
-                            subtitle = "Vibrate on key actions for a more tactile experience.",
+                            title = "Haptic Ticks",
+                            subtitle = "Provide tactile vibration feedback on button presses and recording state.",
                             icon = Icons.Default.Vibration,
                             iconBg = Color(0xFFBE185D).copy(alpha = 0.5f),
                             iconTint = Color(0xFFF472B6),
                             checked = hapticFeedback,
-                            onCheckedChange = { hapticFeedback = it }
+                            onCheckedChange = {
+                                hapticFeedback = it
+                                app.secureConfig.isHapticFeedbackEnabled = it
+                            }
                         )
                     }
                 }
             }
 
-            // Group 3: LISTENING BEHAVIOR
+            // Group 3: LISTENING BEHAVIOR & VAD
             item {
                 Text(
-                    text = "LISTENING BEHAVIOR",
+                    text = "LISTENING & PAUSE DETECTION",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = DesignTokens.Colors.TextSubtle,
@@ -312,26 +278,27 @@ fun BehaviorSettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Silence Detection",
+                                    text = "Silence Auto-Stop (VAD)",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Automatically stop listening after a pause.",
+                                    text = "Stops listening automatically after pause",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
                             }
                             Text(
-                                text = "${silenceDuration} seconds",
-                                fontSize = 12.sp,
-                                color = DesignTokens.Colors.TextMuted
+                                text = "${silenceDuration}s",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DesignTokens.ElectricBlue
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Navigate",
+                                contentDescription = "Edit",
                                 tint = DesignTokens.Colors.TextSubtle,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -344,7 +311,10 @@ fun BehaviorSettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { continuousListening = !continuousListening }
+                                .clickable {
+                                    continuousListening = !continuousListening
+                                    app.secureConfig.isContinuousListening = continuousListening
+                                }
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
@@ -363,38 +333,32 @@ fun BehaviorSettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Continuous Listening",
+                                    text = "Continuous Dictation",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Keep listening for longer conversations.",
+                                    text = "Allows prolonged uninterrupted speaking",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
                             }
                             Text(
-                                text = if (continuousListening) "On" else "Off",
-                                fontSize = 12.sp,
-                                color = if (continuousListening) DesignTokens.ElectricBlue else DesignTokens.Colors.TextMuted
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Navigate",
-                                tint = DesignTokens.Colors.TextSubtle,
-                                modifier = Modifier.size(16.dp)
+                                text = if (continuousListening) "ON" else "OFF",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (continuousListening) DesignTokens.Colors.StatusReady else DesignTokens.Colors.TextMuted
                             )
                         }
                     }
                 }
             }
 
-            // Group 4: SMART FEATURES
+            // Group 4: VOICE COMMANDS & CUSTOM SHORTCUTS
             item {
                 Text(
-                    text = "SMART FEATURES",
+                    text = "VOICE COMMANDS & SHORTCUTS",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = DesignTokens.Colors.TextSubtle,
@@ -412,18 +376,21 @@ fun BehaviorSettingsScreen(
                     Column(modifier = Modifier.padding(16.dp)) {
                         // Use Voice Commands
                         SwitchRow(
-                            title = "Use Voice Commands",
-                            subtitle = "Control OwnVoice with voice commands (e.g. \"new line\", \"comma\", \"open\").",
+                            title = "Punctuation Voice Commands",
+                            subtitle = "Converts spoken \"new line\", \"period\", \"comma\", \"question mark\" to symbols.",
                             icon = Icons.Default.Tag,
                             iconBg = Color(0xFFB45309).copy(alpha = 0.5f),
                             iconTint = DesignTokens.AmberAccent,
                             checked = useVoiceCommands,
-                            onCheckedChange = { useVoiceCommands = it }
+                            onCheckedChange = {
+                                useVoiceCommands = it
+                                app.secureConfig.isVoiceCommandsEnabled = it
+                            }
                         )
 
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DesignTokens.Colors.BorderSubtle, thickness = 0.5.dp)
 
-                        // Custom Commands
+                        // Custom Commands / Snippets
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -438,22 +405,22 @@ fun BehaviorSettingsScreen(
                                     .background(Color(0xFF1E293B))
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.MoreHoriz,
-                                    contentDescription = "Commands",
-                                    tint = DesignTokens.Colors.TextMuted,
+                                    imageVector = Icons.Default.FlashOn,
+                                    contentDescription = "Shortcuts",
+                                    tint = DesignTokens.Colors.IconSquircleSnippets,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Custom Commands",
+                                    text = "Spoken Snippets & Macros",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Create your own voice shortcuts.",
+                                    text = "Manage triggers like \"my email\" or \"calendar link\"",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
@@ -467,7 +434,7 @@ fun BehaviorSettingsScreen(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -476,9 +443,11 @@ fun BehaviorSettingsScreen(
         val durations = listOf(1.0f, 1.5f, 2.0f, 2.5f, 3.0f)
         AlertDialog(
             onDismissRequest = { showSilenceDialog = false },
-            title = { Text("Silence Detection Duration", color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Bold) },
+            title = { Text("Silence Auto-Stop Duration", color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
+                    Text("How long to wait after you stop speaking before auto-stopping:", color = DesignTokens.Colors.TextMuted, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
                     durations.forEach { d ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -486,20 +455,22 @@ fun BehaviorSettingsScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     silenceDuration = d
+                                    app.secureConfig.silenceDetectionSeconds = d
                                     showSilenceDialog = false
                                 }
-                                .padding(vertical = 10.dp)
+                                .padding(vertical = 8.dp)
                         ) {
                             RadioButton(
                                 selected = silenceDuration == d,
                                 onClick = {
                                     silenceDuration = d
+                                    app.secureConfig.silenceDetectionSeconds = d
                                     showSilenceDialog = false
                                 },
                                 colors = RadioButtonDefaults.colors(selectedColor = DesignTokens.Colors.PrimaryBlue)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("$d seconds", color = DesignTokens.Colors.TextPrimary, fontSize = 14.sp)
+                            Text("$d seconds ${if (d == 1.5f) "(Recommended)" else ""}", color = DesignTokens.Colors.TextPrimary, fontSize = 14.sp)
                         }
                     }
                 }

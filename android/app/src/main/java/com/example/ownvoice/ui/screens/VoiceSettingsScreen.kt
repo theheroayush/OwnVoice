@@ -7,7 +7,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -45,6 +44,9 @@ fun VoiceSettingsScreen(
     var speakingStyle by remember { mutableStateOf(app.secureConfig.speakingStyle) }
     var inputSensitivity by remember { mutableFloatStateOf(app.secureConfig.inputSensitivity) }
 
+    var showAdvancedDialog by remember { mutableStateOf(false) }
+    var customInstructions by remember { mutableStateOf(app.secureConfig.customInstructions) }
+
     var tts: TextToSpeech? by remember { mutableStateOf(null) }
     var isTtsReady by remember { mutableStateOf(false) }
 
@@ -74,9 +76,9 @@ fun VoiceSettingsScreen(
     )
 
     val modelOptions = listOf(
-        PillOption("fast", "Fast", "Low latency"),
-        PillOption("balanced", "Balanced", "Best for most users"),
-        PillOption("high_quality", "High Quality", "Maximum accuracy")
+        PillOption("fast", "Fast", "Ultra low latency"),
+        PillOption("balanced", "Balanced", "Best accuracy & speed"),
+        PillOption("high_quality", "High Quality", "Deep reasoning")
     )
 
     val styleOptions = listOf(
@@ -123,61 +125,8 @@ fun VoiceSettingsScreen(
                         color = DesignTokens.Colors.TextPrimary
                     )
                     Text(
-                        text = "Your voice, everywhere",
+                        text = "Voice Intelligence",
                         fontSize = 10.sp,
-                        color = DesignTokens.Colors.TextSubtle
-                    )
-                }
-            }
-        },
-        bottomBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DesignTokens.Colors.BackgroundDark)
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Button(
-                    onClick = {
-                        app.secureConfig.language = language
-                        app.secureConfig.voiceModelTier = voiceModelTier
-                        app.secureConfig.speakingStyle = speakingStyle
-                        app.secureConfig.inputSensitivity = inputSensitivity
-                        // Map speakingStyle to dictationMode
-                        app.secureConfig.dictationMode = when (speakingStyle) {
-                            "professional" -> "professional"
-                            "casual" -> "casual"
-                            "concise" -> "smart_flow"
-                            else -> "smart_flow"
-                        }
-                        Toast.makeText(context, "Voice settings saved", Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.PrimaryBlue),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                ) {
-                    Text(
-                        text = "Save Changes",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Info",
-                        tint = DesignTokens.Colors.TextSubtle,
-                        modifier = Modifier.size(13.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Changes will apply immediately.",
-                        fontSize = 11.sp,
                         color = DesignTokens.Colors.TextSubtle
                     )
                 }
@@ -189,7 +138,7 @@ fun VoiceSettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Header
             item {
@@ -202,7 +151,7 @@ fun VoiceSettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Customize how OwnVoice understands and converts your voice into text.",
+                    text = "Customize language, AI model, style, and microphone sensitivity.",
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = DesignTokens.Colors.TextMuted
@@ -239,23 +188,17 @@ fun VoiceSettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Language",
+                                    text = "Target Language",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Choose the language you primarily speak.",
+                                    text = "Transcription prompt adapts automatically.",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
                             }
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Navigate",
-                                tint = DesignTokens.Colors.TextSubtle,
-                                modifier = Modifier.size(16.dp)
-                            )
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -302,7 +245,9 @@ fun VoiceSettingsScreen(
                                         text = { Text(opt, color = DesignTokens.Colors.TextPrimary, fontSize = 13.sp) },
                                         onClick = {
                                             language = opt
+                                            app.secureConfig.language = opt
                                             languageExpanded = false
+                                            Toast.makeText(context, "Language set to $opt", Toast.LENGTH_SHORT).show()
                                         }
                                     )
                                 }
@@ -312,7 +257,7 @@ fun VoiceSettingsScreen(
                 }
             }
 
-            // Card 2: Voice Model
+            // Card 2: Voice Model Tier
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -342,23 +287,17 @@ fun VoiceSettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Voice Model",
+                                    text = "Voice Model Tier",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Select the AI model that best suits your needs.",
+                                    text = "Gemini 3.6 Flash reasoning depth",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
                             }
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Navigate",
-                                tint = DesignTokens.Colors.TextSubtle,
-                                modifier = Modifier.size(16.dp)
-                            )
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
@@ -366,7 +305,10 @@ fun VoiceSettingsScreen(
                         SegmentedPillSelector(
                             options = modelOptions,
                             selectedId = voiceModelTier,
-                            onOptionSelected = { voiceModelTier = it }
+                            onOptionSelected = {
+                                voiceModelTier = it
+                                app.secureConfig.voiceModelTier = it
+                            }
                         )
                     }
                 }
@@ -408,7 +350,7 @@ fun VoiceSettingsScreen(
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Choose how OwnVoice should interpret your voice.",
+                                    text = "Adapts tone and vocabulary to your workflow",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
@@ -420,7 +362,16 @@ fun VoiceSettingsScreen(
                         SegmentedPillSelector(
                             options = styleOptions,
                             selectedId = speakingStyle,
-                            onOptionSelected = { speakingStyle = it }
+                            onOptionSelected = {
+                                speakingStyle = it
+                                app.secureConfig.speakingStyle = it
+                                app.secureConfig.dictationMode = when (it) {
+                                    "professional" -> "formal_document"
+                                    "casual" -> "chat"
+                                    "concise" -> "bullet_notes"
+                                    else -> "smart_flow"
+                                }
+                            }
                         )
                     }
                 }
@@ -456,24 +407,27 @@ fun VoiceSettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Voice Input Sensitivity",
+                                    text = "Microphone Gain & Sensitivity",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Adjust how sensitive the microphone is to your voice.",
+                                    text = "Adjusts dynamic Auto-Gain Control (AGC) scaling",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         Slider(
                             value = inputSensitivity,
-                            onValueChange = { inputSensitivity = it },
+                            onValueChange = {
+                                inputSensitivity = it
+                                app.secureConfig.inputSensitivity = it
+                            },
                             colors = SliderDefaults.colors(
                                 thumbColor = Color.White,
                                 activeTrackColor = DesignTokens.Colors.PrimaryBlue,
@@ -485,15 +439,15 @@ fun VoiceSettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Less Sensitive", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
-                            Text("Balanced", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
-                            Text("More Sensitive", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
+                            Text("1.0x (Quiet)", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
+                            Text("2.5x (Balanced)", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
+                            Text("4.0x (Sensitive)", fontSize = 11.sp, color = DesignTokens.Colors.TextSubtle)
                         }
                     }
                 }
             }
 
-            // Card 5: Advanced Options
+            // Card 5: Custom Prompt & System Instructions
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -501,7 +455,7 @@ fun VoiceSettingsScreen(
                     border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNavigateToAdvanced() }
+                        .clickable { showAdvancedDialog = true }
                 ) {
                     Row(
                         modifier = Modifier
@@ -517,8 +471,8 @@ fun VoiceSettingsScreen(
                                 .background(Color(0xFF1E293B))
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Advanced",
+                                imageVector = Icons.Default.EditNote,
+                                contentDescription = "Custom Prompt",
                                 tint = DesignTokens.Colors.TextMuted,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -526,20 +480,20 @@ fun VoiceSettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Advanced Options",
+                                text = "Custom Prompt Instructions",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = DesignTokens.Colors.TextPrimary
                             )
                             Text(
-                                text = "Custom vocabulary, noise filtering and more.",
+                                text = if (customInstructions.isNotBlank()) "Custom prompt active" else "Add persona rules or domain terminology",
                                 fontSize = 11.sp,
-                                color = DesignTokens.Colors.TextMuted
+                                color = if (customInstructions.isNotBlank()) DesignTokens.Colors.StatusReady else DesignTokens.Colors.TextMuted
                             )
                         }
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Navigate",
+                            contentDescription = "Edit",
                             tint = DesignTokens.Colors.TextSubtle,
                             modifier = Modifier.size(16.dp)
                         )
@@ -547,7 +501,7 @@ fun VoiceSettingsScreen(
                 }
             }
 
-            // Card 6: Preview
+            // Card 6: Preview Sample
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -577,13 +531,13 @@ fun VoiceSettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Preview",
+                                    text = "Audio Preview",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Test your settings with a sample phrase.",
+                                    text = "Test TTS speech output preview",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
@@ -616,7 +570,7 @@ fun VoiceSettingsScreen(
                                     if (isTtsReady && tts != null) {
                                         tts?.speak("This is how your voice will look in text.", TextToSpeech.QUEUE_FLUSH, null, "sample_tts")
                                     } else {
-                                        Toast.makeText(context, "Playing audio preview...", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "TTS engine initializing...", Toast.LENGTH_SHORT).show()
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.PrimaryBlue),
@@ -635,8 +589,56 @@ fun VoiceSettingsScreen(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
+    }
+
+    if (showAdvancedDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdvancedDialog = false },
+            title = { Text("Custom Prompt Instructions", color = DesignTokens.Colors.TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        text = "Add custom instructions injected into the Gemini 3.6 Flash transcription prompt (e.g. formatting preferences, technical terms):",
+                        color = DesignTokens.Colors.TextMuted,
+                        fontSize = 13.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = customInstructions,
+                        onValueChange = { customInstructions = it },
+                        placeholder = { Text("e.g. Always format medical terms in Latin...", color = DesignTokens.Colors.TextSubtle) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = DesignTokens.Colors.PrimaryBlue,
+                            unfocusedBorderColor = DesignTokens.Colors.BorderSubtle,
+                            focusedTextColor = DesignTokens.Colors.TextPrimary,
+                            unfocusedTextColor = DesignTokens.Colors.TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        app.secureConfig.customInstructions = customInstructions
+                        showAdvancedDialog = false
+                        Toast.makeText(context, "Custom instructions saved", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.PrimaryBlue)
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdvancedDialog = false }) {
+                    Text("Cancel", color = DesignTokens.Colors.TextMuted)
+                }
+            },
+            containerColor = DesignTokens.Colors.CardSurface
+        )
     }
 }

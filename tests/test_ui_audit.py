@@ -374,7 +374,7 @@ class TestUIAudit(unittest.TestCase):
         # Trigger dock
         self.widget.dock()
         self.assertEqual(self.widget.state, "DOCKED")
-        self.assertEqual(self.widget.width, 165)
+        self.assertEqual(self.widget.width, self.widget.docked_width)
 
     def test_mouse_drag_pointer_capture_and_release(self):
         """Verify Win32 SetCapture and ReleaseCapture guard mouse dragging against pointer loss."""
