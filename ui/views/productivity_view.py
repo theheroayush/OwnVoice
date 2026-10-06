@@ -9,8 +9,7 @@ import datetime
 from ui.design_tokens import (
     BG_APP, BG_CARD, BG_CARD_HOVER, BORDER_CARD,
     ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_EMERALD, ACCENT_SKY, ACCENT_AMBER,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_SUBTLE,
-    CHART_BAR_DEFAULT, CHART_BAR_ACTIVE, CHART_TOOLTIP_BG
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, CHART_BAR_DEFAULT, CHART_BAR_ACTIVE, CHART_TOOLTIP_BG
 )
 
 class ProductivityView(ctk.CTkFrame):
@@ -346,8 +345,8 @@ class ProductivityView(ctk.CTkFrame):
                 self.chart_canvas.create_text(tip_x + tip_w / 2, tip_y + tip_h / 2, text=f"{days[i]}, 2026 • {val:,} words", fill="#CBD5E1", font=("Segoe UI", 8, "bold"))
 
     def _on_canvas_hover(self, event):
-        x, y = event.x, event.y
-        for bx0, by0, bx1, by1, idx, val, day in getattr(self, "_bar_coords", []):
+        x = event.x
+        for bx0, _by0, bx1, _by1, idx, _val, _day in getattr(self, "_bar_coords", []):
             if bx0 <= x <= bx1:
                 if self.active_bar_idx != idx:
                     self.active_bar_idx = idx

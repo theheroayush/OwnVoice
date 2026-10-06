@@ -1,8 +1,18 @@
-sounddevice>=0.4.6
-customtkinter>=5.2.0
-pystray>=0.19.5
-pynput>=1.7.6
-pyperclip>=1.8.2
-requests>=2.31.0
-Pillow>=10.0.0
-python-dotenv>=1.0.0
+# OwnVoice desktop app — required runtime dependencies
+sounddevice>=0.4.6        # microphone capture (PortAudio bindings)
+numpy>=1.26.0             # AGC, dBFS VU metering, audio downmix DSP
+customtkinter>=5.2.0      # settings window UI toolkit
+pystray>=0.19.5           # system tray icon
+pynput>=1.7.6             # global hotkeys and cursor injection
+pyperclip>=1.8.2          # clipboard helpers
+requests>=2.31.0          # Gemini REST transcription calls
+Pillow>=10.0.0            # tray icon and QR code rasterization
+qrcode>=7.4.2             # Phone Link pairing QR code
+python-dotenv>=1.0.0      # loads GEMINI_API_KEY from .env
+psutil>=5.9.0             # single-instance detection and process inspection
+
+# Optional extras (the app degrades gracefully when these are absent)
+# onnxruntime>=1.17.0     # offline Whisper fallback engine (core/offline_engine.py)
+# aiohttp>=3.9.0          # realtime Cloud Relay websocket bridge (core/bridge_server.py)
+# fastapi>=0.110.0        # standalone cloud relay service (server/cloud_relay.py)
+# uvicorn>=0.29.0         # ASGI server for server/cloud_relay.py

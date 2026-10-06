@@ -1,8 +1,6 @@
 import unittest
 import time
-import ctypes
 from unittest.mock import MagicMock, patch
-from ctypes import wintypes
 from core.injector import CursorInjector, VK_MENU, VK_ESCAPE
 from core.hotkey_manager import HotkeyManager, VK_F8
 from core.audio_recorder import AudioRecorder

@@ -2,7 +2,7 @@
 import socket
 import json
 import time
-from core.bridge_server import BridgeServer, get_local_ip
+from core.bridge_server import BridgeServer
 
 class TestBridgeDiscovery(unittest.TestCase):
     def setUp(self):

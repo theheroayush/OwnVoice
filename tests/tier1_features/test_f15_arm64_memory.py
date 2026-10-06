@@ -1,5 +1,4 @@
 import os
-import sys
 import unittest
 import psutil
 
@@ -13,7 +12,7 @@ class TestF15Arm64Memory(unittest.TestCase):
         """Verify importing core audio recorder adds modest memory (< 15MB)."""
         process = psutil.Process(os.getpid())
         mem_before = process.memory_info().rss
-        import core.audio_recorder
+        import core.audio_recorder  # noqa: F401 - the import itself is what is measured
         mem_after = process.memory_info().rss
         overhead_mb = (mem_after - mem_before) / (1024 * 1024)
         # Import overhead should be reasonable
@@ -23,7 +22,7 @@ class TestF15Arm64Memory(unittest.TestCase):
         """Verify importing core injector adds minimal overhead (< 5MB)."""
         process = psutil.Process(os.getpid())
         mem_before = process.memory_info().rss
-        import core.injector
+        import core.injector  # noqa: F401 - the import itself is what is measured
         mem_after = process.memory_info().rss
         overhead_mb = (mem_after - mem_before) / (1024 * 1024)
         self.assertLess(overhead_mb, 10.0)
@@ -32,7 +31,7 @@ class TestF15Arm64Memory(unittest.TestCase):
         """Verify importing snippet engine adds minimal overhead (< 2MB)."""
         process = psutil.Process(os.getpid())
         mem_before = process.memory_info().rss
-        import core.snippet_engine
+        import core.snippet_engine  # noqa: F401 - the import itself is what is measured
         mem_after = process.memory_info().rss
         overhead_mb = (mem_after - mem_before) / (1024 * 1024)
         self.assertLess(overhead_mb, 5.0)
@@ -41,7 +40,7 @@ class TestF15Arm64Memory(unittest.TestCase):
         """Verify importing context detector adds minimal overhead (< 2MB)."""
         process = psutil.Process(os.getpid())
         mem_before = process.memory_info().rss
-        import core.context_detector
+        import core.context_detector  # noqa: F401 - the import itself is what is measured
         mem_after = process.memory_info().rss
         overhead_mb = (mem_after - mem_before) / (1024 * 1024)
         self.assertLess(overhead_mb, 5.0)

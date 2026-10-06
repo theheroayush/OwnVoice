@@ -1,8 +1,5 @@
-import os
 import sys
 import time
-import ctypes
-from ctypes import wintypes
 import threading
 from typing import Callable, Optional
 from pynput import keyboard

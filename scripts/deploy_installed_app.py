@@ -2,7 +2,6 @@
 Deploy freshly compiled OwnVoice Desktop Hub executable to installed application path.
 Preserves user configurations (config.json, .env, history.json, notes.db).
 """
-import os
 import sys
 import shutil
 import time

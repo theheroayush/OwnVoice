@@ -74,7 +74,7 @@ export default function DownloadPage() {
             </div>
 
             <a
-              href="/releases/OwnVoice-v1.0.0-Windows-ARM64.zip"
+              href="/releases/OwnVoice-v2.0.0-Windows.zip"
               className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs flex items-center justify-center gap-2 transition-all border border-white/10"
             >
               <Download className="w-4 h-4" />

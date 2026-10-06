@@ -21,15 +21,16 @@ async function runProbes() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      email: "admin@ownvoice.ai",
-      password: "AdminPassword123!",
+      // `npm run db:seed` prints the generated password once; pass it here.
+      email: process.env.SEED_ADMIN_EMAIL || "admin@ownvoice.ai",
+      password: process.env.SEED_ADMIN_PASSWORD || "",
     }),
   });
 
   assert.equal(loginRes.status, 200, "Login must return 200");
   const loginData = await loginRes.json();
   assert.equal(loginData.success, true);
-  assert.equal(loginData.user.email, "admin@ownvoice.ai");
+  assert.equal(loginData.user.email, process.env.SEED_ADMIN_EMAIL || "admin@ownvoice.ai");
   console.log("✓ /api/auth/login authenticated successfully");
 
   // Extract session cookie

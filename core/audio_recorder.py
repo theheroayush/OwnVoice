@@ -1,6 +1,5 @@
 import io
 import math
-import struct
 import threading
 import wave
 from typing import List, Optional, Tuple, Union
@@ -217,7 +216,11 @@ class AudioRecorder:
             max_in = d.get("max_input_channels", 0)
             sr = samplerate or int(d.get("default_samplerate", 48000))
             if max_in > 0:
-                ch = channels or min(2, max_in)
+                # Never request more channels than the endpoint actually exposes
+                # (e.g. mono Bluetooth headsets), otherwise PortAudio rejects the
+                # stream and the self-healing fallback wastes an attempt.
+                requested = channels or min(2, max_in)
+                ch = max(1, min(int(requested), int(max_in)))
                 candidates.append((idx, ch, sr))
                 if ch > 1:
                     candidates.append((idx, 1, sr))

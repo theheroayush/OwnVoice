@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 import argparse
@@ -26,7 +25,7 @@ def build_suite(tier="all", feature=None):
     if tier in ("4", "all"):
         tiers_to_run.append(("Tier 4: Real-World Scenarios", tests_dir / "tier4_scenarios"))
 
-    for tier_name, tier_path in tiers_to_run:
+    for _tier_name, tier_path in tiers_to_run:
         if not tier_path.exists():
             continue
         pattern = f"*f{feature.lower().replace('f', '')}*.py" if feature else "*.py"
@@ -65,7 +64,7 @@ def main():
 
     print("=" * 80)
     print(" OwnVoice Comprehensive E2E Test Suite Runner")
-    print(f" Target Platform : Windows (ARM64 / x64)")
+    print(" Target Platform : Windows (ARM64 / x64)")
     print(f" Executing Tier  : {args.tier.upper()}")
     if args.feature:
         print(f" Feature Filter  : {args.feature.upper()}")

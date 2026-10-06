@@ -7,8 +7,7 @@ import tkinter as tk
 import customtkinter as ctk
 from ui.design_tokens import (
     BG_APP, BG_CARD, BG_CARD_HOVER, BORDER_CARD,
-    ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_EMERALD, ACCENT_SKY, ACCENT_AMBER,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_SUBTLE
+    ACCENT_SKY, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED
 )
 
 class PhoneView(ctk.CTkFrame):

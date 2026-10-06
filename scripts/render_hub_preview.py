@@ -3,7 +3,7 @@ Renders a visual preview showcase of the new Tier-1 OwnVoice Desktop Hub
 to the artifacts directory so the user can verify the design fidelity.
 """
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 ARTIFACT_DIR = Path(r"C:\Users\ayush\.gemini\antigravity\brain\5ea4f4e3-15d7-4c21-9504-b5fbba15d970")
 OUT_FILE = ARTIFACT_DIR / "desktop_hub_preview.png"

@@ -21,6 +21,7 @@ function cleanSpokenText(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   try {
     const body = await req.json().catch(() => ({}));
     const rawText = (body.text || "").trim();
@@ -59,7 +60,8 @@ export async function POST(req: NextRequest) {
       rawInput: rawText,
       cleanedOutput: output,
       intent,
-      latencyMs: Math.floor(Math.random() * 80) + 120, // realistic ~150ms
+      // Report the real processing time instead of a hardcoded "realistic" number.
+      latencyMs: Date.now() - startedAt,
     });
   } catch (err: any) {
     return NextResponse.json(

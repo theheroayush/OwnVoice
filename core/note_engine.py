@@ -1,8 +1,7 @@
 import json
 import base64
-import time
 import re
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional
 import requests
 from requests.adapters import HTTPAdapter
 from core.offline_engine import OfflineWhisperEngine
@@ -186,11 +185,24 @@ class NoteEngine:
                 transcript = ""
 
         transcript = transcript.strip()
+
+        # No speech captured (and no API key to transcribe it): never inject a
+        # boilerplate template into the user's document.
+        if not transcript:
+            return {
+                "title": "Empty Note",
+                "category": category if category != "auto" else "general",
+                "tags": ["empty"],
+                "summary": "",
+                "structured_content": "",
+                "raw_transcript": "",
+                "source": source
+            }
+
         title = "Spoken Note"
-        if transcript:
-            first_sentence = re.split(r"[.!?\n]", transcript)[0]
-            words = first_sentence.split()[:6]
-            title = " ".join(words).capitalize() if words else "Spoken Note"
+        first_sentence = re.split(r"[.!?\n]", transcript)[0]
+        words = first_sentence.split()[:6]
+        title = " ".join(words).capitalize() if words else "Spoken Note"
 
         structured = f"### 📝 Notes\n- {transcript}\n\n### ⚡ Action Items\n- [ ] Review note contents"
         if selection_context:

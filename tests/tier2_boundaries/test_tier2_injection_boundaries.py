@@ -164,6 +164,7 @@ class TestTier2InjectionBoundaries(unittest.TestCase):
     def test_b_f10_update_with_own_process_pid_rejected(self):
         """Verify that any window belonging to os.getpid() is never accepted as last_target_hwnd."""
         current_pid = os.getpid()
+        self.assertGreater(current_pid, 0)
         self.injector.last_target_hwnd = 99999
         # If injector checks PID, passing an HWND with current PID should be ignored
         if hasattr(self.injector, "update_target_hwnd"):

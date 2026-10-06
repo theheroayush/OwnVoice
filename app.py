@@ -24,7 +24,7 @@ from core.snippet_engine import SnippetEngine
 from ui.floating_widget import FloatingWidget
 from ui.settings_window import SettingsWindow
 from ui.tray_icon import TrayIcon
-from core.bridge_server import BridgeServer, get_local_ip
+from core.bridge_server import BridgeServer
 from core.note_store import NoteStore
 from core.note_engine import NoteEngine
 from core.selection_reader import SelectionReader
@@ -147,7 +147,7 @@ class OwnVoiceApp:
         self.selection_reader = SelectionReader()
         self.current_selection = None
         self.overlay_visible = True
-        sound_effects.enabled = self.config.get("sound_effects", True)
+        sound_effects.enabled = self.config.get("sound_effects", False)
         self.active_context_mode = "smart_flow"
         self.active_context_label = ""
         self.bridge_server = BridgeServer(
@@ -282,6 +282,15 @@ class OwnVoiceApp:
                     )
                     structured_text = note_dict.get("structured_content") or note_dict.get("summary") or ""
                     title = note_dict.get("title", "Voice Note")
+
+                    # Nothing was transcribed — do not save or inject an empty note.
+                    if not structured_text.strip():
+                        log_event("Note Taker captured no speech — discarding empty note")
+                        if self.overlay.root:
+                            self.overlay.root.after(0, lambda: self.overlay.show_error("No speech"))
+                        self.is_note_session = False
+                        return
+
                     nid = self.note_store.save_note(
                         title=title,
                         category=note_dict.get("category", "general"),
@@ -492,7 +501,7 @@ class OwnVoiceApp:
 
             log_event("Entering mainloop...")
             self.overlay.root.mainloop()
-        except Exception as e:
+        except Exception:
             import traceback
             err = traceback.format_exc()
             log_event(f"FATAL ERROR: {err}")
@@ -522,7 +531,7 @@ def run_bridge_only():
     print("  [*] OwnVoice Ecosystem Bridge Active (v2.5.0 Universal)")
     print(f"  Platform: {sys.platform.upper()}")
     print(f"  Local IP: {server.local_ip}:{server.port}")
-    print(f"  UDP Auto-Discovery Beacon: Port 8766 Active")
+    print("  UDP Auto-Discovery Beacon: Port 8766 Active")
     print(f"  Session Pairing PIN: {server.current_pin}")
     print("  Ready to stream text from your Android phone!")
     print("  Press Ctrl+C to terminate.")
@@ -551,7 +560,7 @@ if __name__ == "__main__":
             ensure_default_desktop()
             app = OwnVoiceApp()
             app.run()
-        except Exception as e:
+        except Exception:
             import traceback
             err = traceback.format_exc()
             log_event(f"FATAL ERROR: {err}")

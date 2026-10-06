@@ -230,6 +230,11 @@ class CursorInjector:
 
     def update_target_hwnd(self, hwnd: Optional[int] = None) -> bool:
         if not (IS_WINDOWS and not isinstance(user32, _DummyWinDLL)):
+            # Non-Windows platforms (or a dummy Win32 layer) cannot validate
+            # window handles, but they must still remember the caller-supplied
+            # target so focus tracking stays consistent across platforms.
+            if hwnd is not None:
+                self.last_target_hwnd = hwnd
             return True
 
         if hwnd is None:

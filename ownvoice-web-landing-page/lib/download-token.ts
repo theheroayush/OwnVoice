@@ -1,9 +1,23 @@
 import crypto from "crypto";
 
-const TOKEN_SECRET =
-  process.env.DOWNLOAD_TOKEN_SECRET ||
-  process.env.JWT_SECRET ||
-  "ownvoice-secure-download-vault-key-prod-2026-strict-anti-piracy";
+const DEV_DOWNLOAD_SECRET = "ownvoice-insecure-dev-download-secret-change-me";
+
+/**
+ * Resolves the HMAC secret used to sign/verify download tokens.
+ * Production requires a real secret so signed download links cannot be forged.
+ */
+function resolveTokenSecret(): string {
+  const secret =
+    process.env.DOWNLOAD_TOKEN_SECRET || process.env.JWT_SECRET;
+  if (secret && secret.length >= 32) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "DOWNLOAD_TOKEN_SECRET (or JWT_SECRET) is not set or shorter than 32 characters. " +
+        "Generate one with: node -e \"crypto.randomBytes(32).toString('hex')\""
+    );
+  }
+  return secret || DEV_DOWNLOAD_SECRET;
+}
 
 export interface DownloadTokenPayload {
   licenseKey: string;
@@ -43,7 +57,7 @@ export function generateDownloadToken(params: {
 
   const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = crypto
-    .createHmac("sha256", TOKEN_SECRET)
+    .createHmac("sha256", resolveTokenSecret())
     .update(payloadEncoded)
     .digest("base64url");
 
@@ -65,7 +79,7 @@ export function verifyDownloadToken(token: string): TokenVerificationResult {
 
   // Verify HMAC signature in constant time
   const expectedSignature = crypto
-    .createHmac("sha256", TOKEN_SECRET)
+    .createHmac("sha256", resolveTokenSecret())
     .update(payloadEncoded)
     .digest("base64url");
 

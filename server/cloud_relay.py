@@ -4,13 +4,27 @@ Enables instant cross-network pairing and control between Mobile and PC across 5
 """
 
 import argparse
-import json
 import logging
+import re
 from collections import defaultdict
 from typing import Dict, Set
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import JSONResponse
 import uvicorn
+
+# A room id is a shared secret between one PC and its paired phone(s). Keep it
+# strict so clients cannot create arbitrarily long keys (memory exhaustion) and
+# so every client uses the same, safe shape.
+ROOM_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
+# Relay-level abuse guards. The relay is public, so a single room must not be
+# able to exhaust the server with connections or oversized frames.
+MAX_CONNECTIONS_PER_ROLE = 4
+MAX_MESSAGE_BYTES = 64 * 1024
+
+
+def is_valid_room_id(room: str) -> bool:
+    """True when `room` looks like an OwnVoice pairing token."""
+    return bool(room) and bool(ROOM_ID_PATTERN.match(room))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("OwnVoiceCloudRelay")
@@ -26,11 +40,20 @@ class RelayHub:
     def __init__(self):
         self.rooms: Dict[str, Dict[str, Set[WebSocket]]] = defaultdict(lambda: {"pc": set(), "phone": set()})
 
-    async def connect(self, room: str, role: str, websocket: WebSocket):
-        await websocket.accept()
+    async def connect(self, room: str, role: str, websocket: WebSocket) -> bool:
+        """Accepts a client; returns False (after closing) when the room is full."""
         normalized_role = "pc" if role.lower() == "pc" else "phone"
+        if len(self.rooms[room][normalized_role]) >= MAX_CONNECTIONS_PER_ROLE:
+            await websocket.close(code=1013)  # Try again later
+            logger.warning(
+                f"Rejected {normalized_role} in room '{room}': limit of "
+                f"{MAX_CONNECTIONS_PER_ROLE} reached"
+            )
+            return False
+        await websocket.accept()
         self.rooms[room][normalized_role].add(websocket)
         logger.info(f"Client connected: room='{room}', role='{normalized_role}'. Total in room: PC={len(self.rooms[room]['pc'])}, Phone={len(self.rooms[room]['phone'])}")
+        return True
 
     def disconnect(self, room: str, role: str, websocket: WebSocket):
         normalized_role = "pc" if role.lower() == "pc" else "phone"
@@ -45,6 +68,10 @@ class RelayHub:
         target_role = "phone" if normalized_role == "pc" else "pc"
 
         if room not in self.rooms:
+            return
+
+        if len(message.encode("utf-8", "ignore")) > MAX_MESSAGE_BYTES:
+            logger.warning(f"Dropped oversized frame ({len(message)} chars) in room {room}")
             return
 
         targets = list(self.rooms[room][target_role])
@@ -73,6 +100,8 @@ async def health():
 
 @app.get("/rooms/{room_id}/status")
 async def room_status(room_id: str):
+    if not is_valid_room_id(room_id):
+        return {"error": "Invalid room id"}
     if room_id in hub.rooms:
         r = hub.rooms[room_id]
         return {
@@ -96,7 +125,16 @@ async def websocket_endpoint(
     room: str = Query(..., description="Unique device pairing room ID / token"),
     role: str = Query("phone", description="'pc' or 'phone'")
 ):
-    await hub.connect(room, role, websocket)
+    if not is_valid_room_id(room):
+        # Close before accepting: never keep a socket for a malformed room id.
+        await websocket.close(code=1008)  # Policy violation
+        logger.warning("Rejected websocket connection with malformed room id")
+        return
+
+    connected = await hub.connect(room, role, websocket)
+    if not connected:
+        return
+
     try:
         while True:
             data = await websocket.receive_text()

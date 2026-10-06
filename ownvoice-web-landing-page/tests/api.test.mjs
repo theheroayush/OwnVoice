@@ -1,13 +1,42 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
-const prisma = new PrismaClient();
-const JWT_SECRET = "ownvoice-jwt-secret-key-production-ready-32-bytes";
+// These are integration tests: they need a generated Prisma client and a
+// reachable database. When that is unavailable (fresh checkout, CI without a
+// DB, missing `prisma generate`) they skip with an actionable message instead
+// of failing the whole `npm test` run.
+let prisma = null;
+let unavailableReason = null;
 
-test("Database connectivity and user creation", async () => {
+try {
+  const { PrismaClient } = await import("@prisma/client");
+  prisma = new PrismaClient();
+  // Probe a real table so a generated-but-unmigrated database is detected too.
+  await prisma.user.count();
+  // Offline sandboxes may install web/tools/prisma-runtime-stub.js, which
+  // answers every query with empty data. Running these tests against it would
+  // assert nothing, so report it as "unavailable" and skip.
+  if (globalThis.__OWNVOICE_PRISMA_STUB__) {
+    throw new Error("placeholder Prisma runtime stub installed (no real database)");
+  }
+} catch (error) {
+  unavailableReason =
+    `Prisma client/database unavailable (${String(error.message).split("\n")[0]}). ` +
+    "Run `npx prisma generate && npx prisma db push` and set DATABASE_URL to enable these tests.";
+  prisma = null;
+}
+
+const integrationTest = unavailableReason ? test.skip : test;
+
+if (unavailableReason) {
+  console.warn(`[api.test] ${unavailableReason}`);
+}
+
+const JWT_SECRET = process.env.JWT_SECRET || "ownvoice-insecure-dev-jwt-secret-change-me";
+
+integrationTest("Database connectivity and user creation", async () => {
   const testEmail = `test_${Date.now()}@example.com`;
   const passwordHash = await bcrypt.hash("Password123!", 10);
 
@@ -42,7 +71,7 @@ test("Database connectivity and user creation", async () => {
   assert.equal(decoded.sub, user.id);
 });
 
-test("License creation and verification flow", async () => {
+integrationTest("License creation and verification flow", async () => {
   const user = await prisma.user.findFirst();
   assert.ok(user, "User must exist");
 
@@ -64,7 +93,7 @@ test("License creation and verification flow", async () => {
   assert.equal(fetched?.id, license.id);
 });
 
-test("Generation and version history flow", async () => {
+integrationTest("Generation and version history flow", async () => {
   const user = await prisma.user.findFirst();
   assert.ok(user, "User must exist");
 
@@ -110,5 +139,7 @@ test("Generation and version history flow", async () => {
 });
 
 test.after(async () => {
-  await prisma.$disconnect();
+  if (prisma) {
+    await prisma.$disconnect();
+  }
 });

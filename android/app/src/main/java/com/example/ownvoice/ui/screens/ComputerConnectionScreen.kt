@@ -71,7 +71,7 @@ fun ComputerConnectionScreen(
                         app.secureConfig.desktopBridgeName = name
                         if (token.isNotBlank()) app.secureConfig.desktopBridgeToken = token
                         if (pin.isNotBlank()) app.secureConfig.desktopBridgePin = pin
-                        if (qrApiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                        if (qrApiKey.isNotBlank() && app.secureConfig.needsApiKey) {
                             app.secureConfig.apiKey = qrApiKey
                         }
                         app.secureConfig.isUseForPcEnabled = true
@@ -410,7 +410,7 @@ fun ComputerConnectionScreen(
                                     app.secureConfig.desktopBridgeName = pc.name
                                     if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
                                     if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
-                                    if (pc.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                    if (pc.apiKey.isNotBlank() && app.secureConfig.needsApiKey) {
                                         app.secureConfig.apiKey = pc.apiKey
                                     }
                                     app.secureConfig.isUseForPcEnabled = true
@@ -463,7 +463,7 @@ fun ComputerConnectionScreen(
                                                 app.secureConfig.desktopBridgeName = pc.name
                                                 if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
                                                 if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
-                                                if (pc.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                                if (pc.apiKey.isNotBlank() && app.secureConfig.needsApiKey) {
                                                     app.secureConfig.apiKey = pc.apiKey
                                                 }
                                                 app.secureConfig.isUseForPcEnabled = true
@@ -724,7 +724,7 @@ fun ComputerConnectionScreen(
                                     app.secureConfig.desktopBridgeName = matched.name
                                     app.secureConfig.desktopBridgePin = pin
                                     if (matched.token.isNotBlank()) app.secureConfig.desktopBridgeToken = matched.token
-                                    if (matched.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                    if (matched.apiKey.isNotBlank() && app.secureConfig.needsApiKey) {
                                         app.secureConfig.apiKey = matched.apiKey
                                     }
                                     app.secureConfig.isUseForPcEnabled = true

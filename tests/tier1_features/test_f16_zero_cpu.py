@@ -1,5 +1,4 @@
 import os
-import time
 import unittest
 import threading
 import psutil
@@ -22,7 +21,7 @@ class TestF16ZeroCpu(unittest.TestCase):
         """Verify instantiating AudioRecorder creates zero background threads at idle."""
         from core.audio_recorder import AudioRecorder
         threads_before = threading.active_count()
-        recorder = AudioRecorder()
+        _recorder = AudioRecorder()  # noqa: F841 - construction side effects are the test
         threads_after = threading.active_count()
         self.assertEqual(threads_after, threads_before, "AudioRecorder.__init__ must not spawn persistent threads")
 
@@ -31,7 +30,7 @@ class TestF16ZeroCpu(unittest.TestCase):
         from core.injector import CursorInjector
         from tests.test_helpers import InMemoryConfigManager
         threads_before = threading.active_count()
-        injector = CursorInjector(InMemoryConfigManager())
+        _injector = CursorInjector(InMemoryConfigManager())  # noqa: F841
         threads_after = threading.active_count()
         self.assertEqual(threads_after, threads_before)
 
@@ -40,7 +39,7 @@ class TestF16ZeroCpu(unittest.TestCase):
         from core.snippet_engine import SnippetEngine
         from tests.test_helpers import InMemoryConfigManager
         threads_before = threading.active_count()
-        engine = SnippetEngine(InMemoryConfigManager())
+        _engine = SnippetEngine(InMemoryConfigManager())  # noqa: F841
         threads_after = threading.active_count()
         self.assertEqual(threads_after, threads_before)
 

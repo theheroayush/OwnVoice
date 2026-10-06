@@ -87,7 +87,7 @@ fun OnboardingScreen(
                         app.secureConfig.desktopBridgeName = name
                         if (token.isNotBlank()) app.secureConfig.desktopBridgeToken = token
                         if (pin.isNotBlank()) app.secureConfig.desktopBridgePin = pin
-                        if (apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                        if (apiKey.isNotBlank() && app.secureConfig.needsApiKey) {
                             app.secureConfig.apiKey = apiKey
                         }
                         app.secureConfig.isUseForPcEnabled = true
@@ -228,7 +228,7 @@ fun OnboardingScreen(
                                     app.secureConfig.desktopBridgeName = pc.name
                                     if (pc.token.isNotBlank()) app.secureConfig.desktopBridgeToken = pc.token
                                     if (pc.pin.isNotBlank()) app.secureConfig.desktopBridgePin = pc.pin
-                                    if (pc.apiKey.isNotBlank() && app.secureConfig.isDefaultOrBlankApiKey) {
+                                    if (pc.apiKey.isNotBlank() && app.secureConfig.needsApiKey) {
                                         app.secureConfig.apiKey = pc.apiKey
                                     }
                                     app.secureConfig.isUseForPcEnabled = true

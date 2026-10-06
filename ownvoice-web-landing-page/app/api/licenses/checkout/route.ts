@@ -14,6 +14,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // SECURITY: this endpoint used to create a COMPLETED purchase plus an
+    // ACTIVE lifetime license without taking any payment. Licenses may only be
+    // issued once a payment gateway has confirmed the charge (see
+    // app/api/webhooks/*), so issuance is now opt-in for local development.
+    const devGrantEnabled =
+      process.env.NODE_ENV !== "production" &&
+      process.env.OWNVOICE_ENABLE_TEST_CHECKOUT === "true";
+    if (!devGrantEnabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Direct license issuance is disabled. Start a real checkout via /api/checkout/session " +
+            "or /pricing — licenses are issued by the payment provider webhook.",
+          code: "LICENSE_ISSUANCE_DISABLED",
+        },
+        { status: 503 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const currency = body.currency || "USD";
     const amount = currency === "INR" ? 399900 : 4900; // Rs 3,999 or $49.00
@@ -33,7 +53,7 @@ export async function POST(req: NextRequest) {
           currency,
           productId: "ownvoice-lifetime",
           status: "COMPLETED",
-          metadata: JSON.stringify({ source: "web_checkout" }),
+          metadata: JSON.stringify({ source: "dev_grant" }),
         },
       }),
       prisma.license.create({

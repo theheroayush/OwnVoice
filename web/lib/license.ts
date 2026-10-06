@@ -9,11 +9,21 @@ export function generateLicenseKey(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // Base32 without confusing chars (0, O, 1, I)
   const segments: string[] = [];
 
+  // 256 is not divisible by the 32-character alphabet, so `byte % 32` would
+  // bias the first 8 letters (each ~1.5x more likely). Reject the (few) bytes
+  // that fall outside the largest multiple of the alphabet size instead.
+  const limit = 256 - (256 % chars.length);
+  const pickChar = (): string => {
+    for (;;) {
+      const [byte] = crypto.randomBytes(1);
+      if (byte < limit) return chars[byte % chars.length];
+    }
+  };
+
   for (let s = 0; s < 4; s++) {
     let segment = "";
-    const randomBytes = crypto.randomBytes(4);
     for (let i = 0; i < 4; i++) {
-      segment += chars[randomBytes[i] % chars.length];
+      segment += pickChar();
     }
     segments.push(segment);
   }

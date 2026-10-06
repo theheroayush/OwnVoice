@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
+import { clientIp, isLockedOut, recordFailure } from "@/lib/rate-limit";
 import { createSessionToken, hashPassword, setSessionCookie } from "@/lib/auth";
 import { activateLicenseForUser } from "@/lib/license";
 import { logEvent } from "@/lib/analytics";
@@ -17,6 +18,18 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const rateKey = `register:${clientIp(req)}`;
+
+    // Account-creation floods are cheap to run and expensive to clean up.
+    const lock = isLockedOut(rateKey, 10, 600);
+    if (!lock.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many sign-up attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(lock.retryAfterSeconds) } }
+      );
+    }
+    recordFailure(rateKey, 10, 600);
+
     if (password.length < 8) {
       return NextResponse.json(
         { success: false, error: "Password must be at least 8 characters long." },
@@ -74,7 +87,9 @@ export async function POST(req: NextRequest) {
     });
 
     setSessionCookie(response, token);
-    await logEvent("signup_completed", user.id, { email: user.email });
+    // NOTE: never put the e-mail address (PII) into the analytics metadata —
+    // the user id is enough to join against the User table when needed.
+    await logEvent("signup_completed", user.id);
 
     return response;
   } catch (error: any) {

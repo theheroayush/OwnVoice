@@ -3,7 +3,7 @@ import ctypes
 import threading
 import time
 import math
-from typing import Callable, Optional
+from typing import Callable
 
 import sys
 

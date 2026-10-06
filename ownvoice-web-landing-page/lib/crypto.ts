@@ -1,10 +1,28 @@
 import crypto from "crypto";
 
-const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || "ownvoice-aes-key-for-byok-tokens-32-chars-long";
+const DEV_ENCRYPTION_SECRET = "ownvoice-insecure-dev-encryption-secret-change-me";
+
+/**
+ * Resolves the AES key material used to encrypt BYOK provider API keys.
+ * Production requires a real ENCRYPTION_SECRET; a hardcoded default would make
+ * every stored key decryptable by anyone with the source code.
+ */
+function resolveEncryptionSecret(): string {
+  const secret = process.env.ENCRYPTION_SECRET;
+  if (secret && secret.length >= 32) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      secret
+        ? "ENCRYPTION_SECRET must be at least 32 characters long."
+        : "ENCRYPTION_SECRET is not set. Generate one with: node -e \"crypto.randomBytes(32).toString('hex')\""
+    );
+  }
+  return secret || DEV_ENCRYPTION_SECRET;
+}
 
 // Derive 32-byte key using SHA-256
 function getDerivedKey(): Buffer {
-  return crypto.createHash("sha256").update(ENCRYPTION_SECRET).digest();
+  return crypto.createHash("sha256").update(resolveEncryptionSecret()).digest();
 }
 
 /**

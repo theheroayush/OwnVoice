@@ -38,9 +38,18 @@ export default function LoginPage() {
     }
   };
 
+  // The seed script generates a random password (it no longer ships a known
+  // default), and production must never pre-fill credentials. Keep this helper
+  // for local demo logins only, driven by NEXT_PUBLIC_DEMO_ADMIN_* env vars.
+  const demoAdminEmail = process.env.NEXT_PUBLIC_DEMO_ADMIN_EMAIL;
+  const demoAdminPassword = process.env.NEXT_PUBLIC_DEMO_ADMIN_PASSWORD;
+  const canFillDemoAdmin =
+    process.env.NODE_ENV !== "production" && Boolean(demoAdminEmail && demoAdminPassword);
+
   const fillAdmin = () => {
-    setEmail("admin@ownvoice.ai");
-    setPassword("AdminPassword123!");
+    if (!canFillDemoAdmin) return;
+    setEmail(demoAdminEmail as string);
+    setPassword(demoAdminPassword as string);
   };
 
   return (
@@ -107,13 +116,15 @@ export default function LoginPage() {
         </form>
 
         <div className="pt-2 text-center space-y-3">
-          <button
-            type="button"
-            onClick={fillAdmin}
-            className="text-[11px] text-zinc-400 hover:text-blue-400 transition-colors font-mono"
-          >
-            ⚡ Quick-fill seeded demo admin credentials
-          </button>
+          {canFillDemoAdmin && (
+            <button
+              type="button"
+              onClick={fillAdmin}
+              className="text-[11px] text-zinc-400 hover:text-blue-400 transition-colors font-mono"
+            >
+              ⚡ Quick-fill local demo admin credentials
+            </button>
+          )}
 
           <p className="text-xs text-zinc-500">
             Don't have an account?{" "}

@@ -1,7 +1,7 @@
 import unittest
 from config import ConfigManager
 from core.context_detector import ContextDetector
-from core.ai_engine import AIEngine, DICTATION_PROMPTS, FALLBACK_MODELS
+from core.ai_engine import DICTATION_PROMPTS, FALLBACK_MODELS
 from core.sound_effects import SoundEffects
 
 class TestF21V2Intelligence(unittest.TestCase):

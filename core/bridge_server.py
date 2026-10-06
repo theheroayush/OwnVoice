@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import base64
 import urllib.parse
@@ -8,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Optional, Callable, Set, Dict, Any
+from typing import Optional, Callable, Set, Any, Dict
 import qrcode
 from PIL import Image
 from core.injector import CursorInjector
@@ -30,16 +31,92 @@ def get_local_ip() -> str:
     return ip
 
 def is_private_ip(ip: str) -> bool:
-    """Checks if an incoming client IP is on a local private network or loopback."""
-    if not ip or ip in ("127.0.0.1", "localhost", "::1", "::ffff:127.0.0.1"):
+    """
+    Checks whether an incoming client IP is loopback, link-local or RFC1918 private.
+
+    Uses the `ipaddress` module so 172.16.0.0/12 is matched precisely (the old
+    prefix check wrongly treated public 172.32+ addresses as local) and IPv6
+    addresses are handled correctly.
+    """
+    if not ip:
+        return False
+    candidate = ip.strip()
+    if candidate.startswith("::ffff:") and candidate.count(":") >= 1:
+        candidate = candidate.split("::ffff:")[-1]
+    if candidate in ("localhost", ""):
         return True
-    return (
-        ip.startswith("192.168.") or
-        ip.startswith("10.") or
-        ip.startswith("172.") or
-        ip.startswith("::ffff:192.168.") or
-        ip.startswith("::ffff:10.")
-    )
+    try:
+        addr = ipaddress.ip_address(candidate)
+        return addr.is_loopback or addr.is_private or addr.is_link_local
+    except ValueError:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Brute-force protection for the 6-digit pairing PIN.
+#
+# A 6-digit PIN is only 1,000,000 combinations — without a limiter a device on
+# the LAN could brute-force it in minutes and then receive the pairing token
+# and the user's Gemini API key from POST /pair.
+# ---------------------------------------------------------------------------
+PAIR_MAX_FAILURES = 5
+PAIR_FAILURE_WINDOW_SEC = 300
+PAIR_LOCKOUT_SEC = 300
+
+
+def pair_lockout_remaining(ip: str) -> int:
+    """Seconds the given client IP must wait before trying the PIN again (0 = allowed)."""
+    now = time.time()
+    fails = [t for t in BridgeState.pair_failures.get(ip, []) if now - t < PAIR_FAILURE_WINDOW_SEC]
+    if not fails:
+        BridgeState.pair_failures.pop(ip, None)
+        return 0
+    BridgeState.pair_failures[ip] = fails
+    if len(fails) >= PAIR_MAX_FAILURES:
+        remaining = PAIR_LOCKOUT_SEC - (now - fails[-1])
+        if remaining > 0:
+            return int(remaining) + 1
+    return 0
+
+
+def register_pair_failure(ip: str) -> None:
+    BridgeState.pair_failures.setdefault(ip, []).append(time.time())
+
+
+def clear_pair_failures(ip: str) -> None:
+    BridgeState.pair_failures.pop(ip, None)
+
+
+def is_authorized_request(client_ip: str, token: str = "", pin: str = "") -> bool:
+    """
+    Central authorization check for state-changing bridge endpoints.
+
+    Allowed when the caller is on the local machine/private LAN, or when it
+    presents the pairing token (or the current 6-digit pairing PIN). A missing
+    token is NOT authorization — public/internet clients are always rejected.
+    """
+    token = (token or "").strip()
+    pin = (pin or "").strip()
+    if token and token == BridgeState.pairing_token:
+        return True
+    if pin and pin == BridgeState.current_pin:
+        return True
+    return is_private_ip(client_ip)
+
+
+def is_loopback_client(ip: str) -> bool:
+    """True only for the local machine itself (127.0.0.0/8, ::1)."""
+    if not ip:
+        return False
+    candidate = ip.strip()
+    if candidate.startswith("::ffff:"):
+        candidate = candidate.split("::ffff:")[-1]
+    if candidate == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(candidate).is_loopback
+    except ValueError:
+        return False
 
 AUTH_FILE = Path.home() / ".ownvoice_bridge_auth.json"
 
@@ -84,6 +161,8 @@ class BridgeState:
     http_port: int = 8765
     latest_pc_clipboard: dict = {"text": "", "timestamp": 0.0, "seq": 0}
     recent_injected_clips: Set[str] = set()
+    # client IP -> list of failed /pair attempt timestamps (see pair_lockout_remaining)
+    pair_failures: Dict[str, list] = {}
     cloud_relay_url: str = "http://127.0.0.1:8767"
     cloud_relay_connected: bool = False
     note_store: Optional[Any] = None
@@ -235,15 +314,20 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
+            # Pairing credentials and the Gemini API key are only disclosed to
+            # the local machine itself. Remote LAN clients must pair with the
+            # PIN (POST /pair) instead of silently harvesting these secrets.
+            trusted_client = is_loopback_client(self.client_address[0])
             payload = json.dumps({
                 "status": "ready",
                 "version": "3.0.0",
+                "service": "ownvoice-bridge",
                 "device_name": BridgeState.device_name,
                 "ip": get_local_ip(),
                 "port": BridgeState.http_port,
-                "token": BridgeState.pairing_token,
-                "pin": BridgeState.current_pin,
-                "api_key": BridgeState.api_key,
+                "token": BridgeState.pairing_token if trusted_client else "",
+                "pin": BridgeState.current_pin if trusted_client else "",
+                "api_key": BridgeState.api_key if trusted_client else "",
                 "latest_clipboard": BridgeState.latest_pc_clipboard.get("text", ""),
                 "clipboard_seq": BridgeState.latest_pc_clipboard.get("seq", 0),
                 "relay_connected": BridgeState.cloud_relay_connected,
@@ -266,7 +350,23 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         if self.path == "/pair":
             client_pin = str(data.get("pin", "")).strip()
             client_device = str(data.get("device", "Android Phone")).strip()
-            if client_pin == BridgeState.current_pin:
+            client_ip = self.client_address[0]
+
+            locked_for = pair_lockout_remaining(client_ip)
+            if locked_for > 0:
+                self.send_response(429)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": False,
+                    "error": f"Too many incorrect PIN attempts. Try again in {locked_for} seconds.",
+                    "retry_after": locked_for,
+                }).encode("utf-8"))
+                return
+
+            if client_pin and client_pin == BridgeState.current_pin:
+                clear_pair_failures(client_ip)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
@@ -285,18 +385,24 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 })
                 self.wfile.write(resp.encode("utf-8"))
             else:
+                register_pair_failure(client_ip)
+                attempts = len(BridgeState.pair_failures.get(client_ip, []))
                 self.send_response(401)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
-                log_bridge_event(f"PIN mismatch from {self.client_address[0]}: provided '{client_pin}', expected '{BridgeState.current_pin}'")
+                # Never log the expected PIN itself — logs get shared/screenshotted.
+                log_bridge_event(
+                    f"Pairing PIN mismatch from {client_ip} "
+                    f"(attempt {attempts}/{PAIR_MAX_FAILURES} before temporary lockout)"
+                )
                 resp = json.dumps({"success": False, "error": "Invalid 6-digit PIN"})
                 self.wfile.write(resp.encode("utf-8"))
 
         elif self.path == "/clipboard":
             client_token = str(data.get("token", "")).strip()
             client_ip = self.client_address[0]
-            if not (is_private_ip(client_ip) or client_token == BridgeState.pairing_token or not client_token):
+            if not is_authorized_request(client_ip, client_token, data.get("pin")):
                 self.send_response(403)
                 self.end_headers()
                 return
@@ -315,6 +421,15 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             return
 
         elif self.path in ("/meeting", "/meeting/save"):
+            client_token = str(data.get("token", "")).strip()
+            client_ip = self.client_address[0]
+            if not is_authorized_request(client_ip, client_token, data.get("pin")):
+                self.send_response(403)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": "Unauthorized."}).encode("utf-8"))
+                return
+
             title = str(data.get("title", "Meeting_Notes")).strip()
             content = str(data.get("content", "")).strip()
             docs_dir = Path.home() / "Documents" / "OwnVoice" / "Meetings"
@@ -337,9 +452,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
         elif self.path in ("/note/create", "/note"):
             client_token = str(data.get("token", "")).strip()
             client_ip = self.client_address[0]
-            is_local = is_private_ip(client_ip)
-            is_auth = (client_token == BridgeState.pairing_token) or is_local or not client_token
-            if not is_auth:
+            if not is_authorized_request(client_ip, client_token, data.get("pin")):
                 self.send_response(403)
                 self.end_headers()
                 return
@@ -414,13 +527,14 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             client_device = data.get("client", "Android Phone")
             client_ip = self.client_address[0]
 
-            is_local = is_private_ip(client_ip)
-            is_auth = (
-                (client_token == BridgeState.pairing_token) or
-                (data.get("pin") == BridgeState.current_pin) or
-                is_local or
-                not client_token
-            )
+            # Keystroke/mouse control is the most dangerous capability the
+            # bridge exposes, so a caller on the same Wi-Fi subnet is not
+            # enough: it must present the pairing token or the current PIN
+            # (the desktop UI always reaches the bridge over loopback).
+            client_pin = str(data.get("pin", "")).strip()
+            token_ok = bool(client_token) and client_token == BridgeState.pairing_token
+            pin_ok = bool(client_pin) and client_pin == BridgeState.current_pin
+            is_auth = is_loopback_client(client_ip) or token_ok or pin_ok
 
             if not is_auth:
                 self.send_response(403)
@@ -428,7 +542,10 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 log_bridge_event(f"Unauthorized injection attempt from {client_ip}")
-                resp = json.dumps({"success": False, "error": "Unauthorized: Token mismatch"})
+                resp = json.dumps({
+                    "success": False,
+                    "error": "Unauthorized: missing or invalid pairing token. Re-pair this device with the desktop app.",
+                })
                 self.wfile.write(resp.encode("utf-8"))
                 return
 
@@ -502,9 +619,13 @@ class BridgeDiscoveryResponder:
                             "device_name": BridgeState.device_name,
                             "ip": current_ip,
                             "port": self.http_port,
+                            # NOTE: the pairing PIN/token are intentionally
+                            # advertised on the LAN so the phone can auto-pair
+                            # (Wi-Fi mode). The Gemini API key is NOT broadcast
+                            # here — the phone receives it from POST /pair after
+                            # the user confirms the PIN shown on the desktop.
                             "pin": BridgeState.current_pin,
-                            "token": BridgeState.pairing_token,
-                            "api_key": BridgeState.api_key
+                            "token": BridgeState.pairing_token
                         }
                         payload = json.dumps(resp_data).encode("utf-8")
                         self._sock.sendto(payload, addr)

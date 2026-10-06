@@ -72,11 +72,37 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    await logEvent("purchase_started", targetUser.id, { currency, email: targetUser.email });
+    // No PII in analytics metadata — user id is enough to join later.
+    await logEvent("purchase_started", targetUser.id, { currency });
 
     // 2. Gateway Dispatch: Cashfree (India / INR) vs Stripe (Global / USD)
+    // Test mode mints a FREE lifetime license. It must therefore never be
+    // reachable in production: it requires an explicit opt-in flag *and* a
+    // non-production NODE_ENV. Otherwise an unconfigured gateway would hand
+    // the product to every visitor.
+    const testCheckoutEnabled =
+      process.env.NODE_ENV !== "production" &&
+      process.env.OWNVOICE_ENABLE_TEST_CHECKOUT === "true";
+
     if (currency === "INR") {
-      const isTestMode = !process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY;
+      const gatewayConfigured = Boolean(
+        process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY
+      );
+
+      if (!gatewayConfigured && !testCheckoutEnabled) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Online payments are temporarily unavailable (Cashfree is not configured). " +
+              "Please try again later or choose the USD/Stripe option.",
+            code: "GATEWAY_NOT_CONFIGURED",
+          },
+          { status: 503 }
+        );
+      }
+
+      const isTestMode = !gatewayConfigured;
       const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
       if (isTestMode) {
@@ -92,7 +118,7 @@ export async function POST(req: NextRequest) {
               currency: "INR",
               productId: "ownvoice-lifetime",
               status: "COMPLETED",
-              metadata: JSON.stringify({ isTestMode: true, email: targetUser.email }),
+              metadata: JSON.stringify({ isTestMode: true }),
             },
           }),
           prisma.license.create({
@@ -129,7 +155,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(cashfreeResult);
     } else {
       // Global: Stripe Checkout
-      const isTestMode = !process.env.STRIPE_SECRET_KEY;
+      const gatewayConfigured = Boolean(process.env.STRIPE_SECRET_KEY);
+
+      if (!gatewayConfigured && !testCheckoutEnabled) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Online payments are temporarily unavailable (Stripe is not configured). " +
+              "Please try again later or choose the INR/Cashfree option.",
+            code: "GATEWAY_NOT_CONFIGURED",
+          },
+          { status: 503 }
+        );
+      }
+
+      const isTestMode = !gatewayConfigured;
       const mockSessionId = `cs_test_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
       if (isTestMode) {
@@ -145,7 +186,7 @@ export async function POST(req: NextRequest) {
               currency: "USD",
               productId: "ownvoice-lifetime",
               status: "COMPLETED",
-              metadata: JSON.stringify({ isTestMode: true, email: targetUser.email }),
+              metadata: JSON.stringify({ isTestMode: true }),
             },
           }),
           prisma.license.create({

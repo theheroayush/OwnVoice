@@ -11,27 +11,47 @@ android {
         applicationId = "com.ownvoice.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 17
-        versionName = "2.5.6"
+        // Keep these in sync with the product version used by the desktop
+        // bridge, the cloud relay and the web download routes (see
+        // core/bridge_server.py, server/cloud_relay.py). The published
+        // v3.0.0 APKs were all built as code 17 / "2.5.6", so the next release
+        // uses code 18 / "3.0.0".
+        versionCode = 18
+        versionName = "3.0.0"
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.keystore")
-            storePassword = "ownvoice123"
-            keyAlias = "ownvoice"
-            keyPassword = "ownvoice123"
+            // Signing credentials are NEVER hardcoded or committed.
+            // Provide them through environment variables (CI) or `keystore.properties`
+            // (local, git-ignored) — see README / keystore.properties.example.
+            val props = java.util.Properties().apply {
+                val f = rootProject.file("keystore.properties")
+                if (f.exists()) f.inputStream().use { load(it) }
+            }
+            fun cred(env: String, prop: String): String? =
+                System.getenv(env) ?: props.getProperty(prop)
+
+            storeFile = file(cred("OWNVOICE_KEYSTORE_FILE", "storeFile") ?: "release.keystore")
+            storePassword = cred("OWNVOICE_KEYSTORE_PASSWORD", "storePassword")
+            keyAlias = cred("OWNVOICE_KEY_ALIAS", "keyAlias") ?: "ownvoice"
+            keyPassword = cred("OWNVOICE_KEY_PASSWORD", "keyPassword") ?: storePassword
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 shrinks + obfuscates the release APK (the ProGuard rules it
+            // uses live in android/app/proguard-rules.pro) and strips unused
+            // resources so the shipped APK stays small.
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            // Debug builds use Gradle's automatic debug keystore — the release
+            // signing key must never be needed (or leaked) for local debug work.
         }
     }
     compileOptions {
@@ -105,3 +125,19 @@ dependencies {
   implementation("com.google.zxing:core:3.5.3")
 }
 
+
+// Fail loudly (instead of producing an unsigned/incorrectly signed artifact)
+// when release signing credentials have not been supplied.
+tasks.matching { it.name.startsWith("assembleRelease") || it.name.startsWith("bundleRelease") }.configureEach {
+    doFirst {
+        val cfg = signingConfigs.getByName("release")
+        if (cfg.storePassword.isNullOrBlank() || cfg.storeFile?.exists() != true) {
+            throw GradleException(
+                "Release signing credentials are missing. Set OWNVOICE_KEYSTORE_FILE / " +
+                    "OWNVOICE_KEYSTORE_PASSWORD (and optionally OWNVOICE_KEY_ALIAS / " +
+                    "OWNVOICE_KEY_PASSWORD) or create android/keystore.properties. " +
+                    "See android/keystore.properties.example."
+            )
+        }
+    }
+}

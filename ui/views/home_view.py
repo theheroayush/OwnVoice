@@ -8,7 +8,7 @@ import datetime
 from ui.design_tokens import (
     BG_APP, BG_CARD, BG_CARD_HOVER, BORDER_CARD,
     ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_EMERALD, ACCENT_SKY,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_SUBTLE
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED
 )
 
 class HomeView(ctk.CTkFrame):
@@ -187,11 +187,12 @@ class HomeView(ctk.CTkFrame):
         if hasattr(self.config, "get_productivity_stats"):
             stats = self.config.get_productivity_stats(self.note_store)
         else:
+            # No stats source: show zeros rather than invented usage numbers.
             stats = {
-                "words_today": 1284,
-                "dictations_today": 42,
-                "time_saved_min": 18,
-                "hours_saved_week": 3.2
+                "words_today": 0,
+                "dictations_today": 0,
+                "time_saved_min": 0,
+                "hours_saved_week": 0.0
             }
 
         metrics_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")
@@ -206,7 +207,6 @@ class HomeView(ctk.CTkFrame):
         sub1 = ctk.CTkFrame(c1, fg_color="transparent")
         sub1.pack(anchor="w", padx=14, pady=(0, 12))
         ctk.CTkLabel(sub1, text="Words today", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(sub1, text="↑ 12%", font=ctk.CTkFont(size=10, weight="bold"), text_color=ACCENT_EMERALD, fg_color="#064E3B", corner_radius=4).pack(side="left")
 
         # Card 2: Dictations
         c2 = ctk.CTkFrame(metrics_frame, fg_color=BG_CARD, corner_radius=10, border_color=BORDER_CARD, border_width=1)
@@ -215,7 +215,6 @@ class HomeView(ctk.CTkFrame):
         sub2 = ctk.CTkFrame(c2, fg_color="transparent")
         sub2.pack(anchor="w", padx=14, pady=(0, 12))
         ctk.CTkLabel(sub2, text="Dictations", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(sub2, text="↑ 8%", font=ctk.CTkFont(size=10, weight="bold"), text_color=ACCENT_EMERALD, fg_color="#064E3B", corner_radius=4).pack(side="left")
 
         # Card 3: Time saved
         c3 = ctk.CTkFrame(metrics_frame, fg_color=BG_CARD, corner_radius=10, border_color=BORDER_CARD, border_width=1)
@@ -227,7 +226,7 @@ class HomeView(ctk.CTkFrame):
         c4 = ctk.CTkFrame(metrics_frame, fg_color=BG_CARD, corner_radius=10, border_color=BORDER_CARD, border_width=1)
         c4.grid(row=0, column=3, sticky="nsew", padx=(8, 0))
         ctk.CTkLabel(c4, text="🎯 Productivity Impact", font=ctk.CTkFont(size=14, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w", padx=14, pady=(12, 2))
-        ctk.CTkLabel(c4, text=f"{stats.get('hours_saved_week', 3.2)} hrs saved this week", font=ctk.CTkFont(size=11), text_color=ACCENT_SKY).pack(anchor="w", padx=14, pady=(0, 12))
+        ctk.CTkLabel(c4, text=f"{stats.get('hours_saved_week', 0)} hrs saved this week", font=ctk.CTkFont(size=11), text_color=ACCENT_SKY).pack(anchor="w", padx=14, pady=(0, 12))
 
     def _build_bottom_grid(self):
         bottom_frame = ctk.CTkFrame(self.scroll, fg_color="transparent")

@@ -37,8 +37,9 @@
 
 If you have been granted access to this private repository, you can download and run OwnVoice immediately without installing Python or compilers:
 
-- **Option 1 (GitHub Releases)**: Click the button above or go to [**Releases v1.0.0**](https://github.com/theheroayush/OwnVoice/releases/tag/v1.0.0) and download `OwnVoice-v1.0.0-Windows-ARM64.zip`.
-- **Option 2 (Direct Repository File)**: Download directly from the repository at [`releases/OwnVoice-v1.0.0-Windows-ARM64.zip`](releases/OwnVoice-v1.0.0-Windows-ARM64.zip).
+- **Option 1 (GitHub Releases)**: see the [**Releases page**](https://github.com/theheroayush/OwnVoice/releases) for the newest tagged build.
+- **Option 2 (Direct Repository File)**: the newest Windows bundle in [`releases/`](releases) (currently `OwnVoice-v2.0.0-Windows.zip`).
+- **Option 3 (Web App)**: installers are also served by the Next.js app through `/releases/<filename>` (see `web/app/releases/[file]/route.ts`), which is what the `/download` page links to.
 
 **How to run it:**
 1. Extract the `.zip` folder anywhere on your computer.
@@ -66,8 +67,12 @@ Open **`http://localhost:3000`** in your browser.
 - **Onboarding**: 7-step onboarding wizard under 2 minutes (`/onboarding`).
 - **Settings & BYOK**: Connect and test AES-256-GCM encrypted API keys (`/app/settings`).
 - **Admin Portal**: Inspect system KPIs, users, and lifetime licenses (`/admin`).
-  - **Admin Email**: `admin@ownvoice.ai`
-  - **Password**: `AdminPassword123!`
+  - Create the first admin with `npm run db:seed`. The password is either taken
+    from `SEED_ADMIN_PASSWORD` or generated once and printed to the console —
+    there is deliberately no shared default password.
+  - Before deploying, set `JWT_SECRET` and `ENCRYPTION_SECRET` (see `web/.env.example`);
+    the app refuses to start with the throwaway development secrets when
+    `NODE_ENV=production`.
 
 ---
 
@@ -192,7 +197,6 @@ ownvoice/
 ├── requirements.txt            # Minimal Python dependencies
 ├── README.md                   # Complete documentation and user guide
 ├── setup.bat                   # 1-Click setup script for Windows
-├── OwnVoice.spec               # Standalone executable build configuration
 │
 ├── core/                       # Core Audio & AI Engine (High performance, zero bloat)
 │   ├── audio_recorder.py       # 48kHz WASAPI capture + 50x Dynamic AGC + device auto-healing
@@ -210,10 +214,16 @@ ownvoice/
 ├── assets/                     # High-resolution screenshots and architecture diagrams
 │   └── screenshots/
 │
-├── dist/OwnVoice/              # Pre-compiled standalone native Windows executable
-│   └── OwnVoice.exe            # 6.8 MB standalone app (Runs with NO Python required!)
+├── releases/                   # Published installers (Windows .zip, Android .apk)
+│   └── OwnVoice-v2.0.0-Windows.zip
 │
-└── tests/                      # Automated test suite (252 passing tests)
+├── android/                    # Native Kotlin companion app (IME, floating bubble, bridge client)
+├── server/cloud_relay.py       # Optional WebSocket relay for cross-network phone → PC control
+│
+├── web/                        # Next.js 15 workspace (BYOK platform, dashboard, admin)
+├── ownvoice-web-landing-page/  # Next.js 15 marketing site + checkout/webhooks/download
+│
+└── tests/                      # Automated test suite (223 tests — see TEST_READY.md)
 ```
 
 ---
@@ -222,7 +232,8 @@ ownvoice/
 
 ### Option A: Run the Pre-Compiled App (No Python Required)
 If you want to use OwnVoice directly without setting up programming tools:
-1. Navigate to the `dist/OwnVoice/` folder.
+1. Download and extract the Windows bundle from [`releases/`](releases)
+   (e.g. `OwnVoice-v2.0.0-Windows.zip`).
 2. Double-click **`OwnVoice.exe`**.
 3. OwnVoice will appear in your system tray and display its floating capsule on your screen!
 
@@ -262,19 +273,20 @@ If you want to modify the code or run it in your Python environment:
 
 ## 🧪 Rigorous Quality & Testing
 
-OwnVoice was developed under strict **production-grade engineering principles** with **zero placeholders and zero mock data**. Every single feature is covered by an automated test suite:
+OwnVoice is covered by a 4-tier automated suite (**223 tests**, see [`TEST_READY.md`](TEST_READY.md) for the per-tier breakdown and Windows targets):
 
 ```bash
-python -m unittest discover -s tests
+python tests/run_tests.py              # Windows (all 223 tests)
+PYTHONPATH=tests/sandbox_stubs python3 tests/run_tests.py   # Linux/headless CI
 ```
-```
-Ran 252 tests in 12.082s
-OK (100% passing)
-```
-- **Tier 1**: Audio capture, AGC, hotkeys, snippets, and caret injector isolation.
-- **Tier 2**: Device re-indexing, headphone disconnect resilience, and clipboard fallbacks.
-- **Tier 3**: Cross-window tone switching and multi-monitor DPI coordinate handling.
-- **Tier 4**: Resource compliance (CPU strictly 0.0–0.1% idle, memory < 150 MB).
+
+- **Tier 1**: Audio capture, AGC, hotkeys, snippets, caret injector isolation, DPI clamping.
+- **Tier 2**: Device re-indexing, headphone disconnect resilience, clipboard fallbacks, malformed input.
+- **Tier 3**: Cross-window tone switching and feature interactions.
+- **Tier 4**: Resource compliance (CPU strictly 0.0–0.1% idle, memory budget) and end-to-end workflows.
+- **Web apps**: `cd web && npm test` (10 tests) and `cd ownvoice-web-landing-page && npm test`
+  (15 tests) cover BYOK crypto, license-key generation, webhook signature verification
+  and auth rate limiting.
 
 ---
 

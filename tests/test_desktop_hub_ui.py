@@ -3,11 +3,9 @@ Unit tests for OwnVoice Desktop Hub UI architecture & views.
 Verifies all 7 views, sidebar navigation routing, vocabulary CRUD, snippet CRUD, and stats calculation.
 """
 import unittest
-import customtkinter as ctk
 from tests.test_helpers import InMemoryConfigManager
 from ui.settings_window import SettingsWindow
 from core.snippet_engine import SnippetEngine
-from core.note_store import NoteStore
 
 class MockAudioRecorder:
     def __init__(self):

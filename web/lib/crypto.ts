@@ -1,10 +1,29 @@
 import crypto from "crypto";
 
-const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || "ownvoice-aes-key-for-byok-tokens-32-chars-long";
+const DEV_ENCRYPTION_SECRET = "ownvoice-insecure-dev-encryption-secret-change-me";
 
-// Derive 32-byte key using SHA-256
+/**
+ * Resolves the BYOK encryption secret.
+ * Production deployments MUST provide a unique ENCRYPTION_SECRET — encrypting
+ * user API keys with a repository-known default would make every stored key
+ * recoverable by anyone with the source. Local development keeps a throwaway
+ * default so `npm run dev` works out of the box.
+ */
+function resolveEncryptionSecret(): string {
+  const secret = process.env.ENCRYPTION_SECRET;
+  if (secret && secret.length >= 32) return secret;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "ENCRYPTION_SECRET is missing or too short (min 32 chars). Refusing to encrypt BYOK keys with an insecure default."
+    );
+  }
+  return DEV_ENCRYPTION_SECRET;
+}
+
+// Derive 32-byte key using SHA-256 (secret resolved lazily, at first use)
 function getDerivedKey(): Buffer {
-  return crypto.createHash("sha256").update(ENCRYPTION_SECRET).digest();
+  return crypto.createHash("sha256").update(resolveEncryptionSecret()).digest();
 }
 
 /**

@@ -6,8 +6,7 @@ import customtkinter as ctk
 from ui.design_tokens import (
     BG_APP, BG_CARD, BG_CARD_HOVER, BORDER_CARD,
     ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_SKY, ACCENT_CRIMSON,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_SUBTLE,
-    get_badge_colors
+    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, get_badge_colors
 )
 
 class SnippetsView(ctk.CTkFrame):

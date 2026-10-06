@@ -3,14 +3,13 @@ OwnVoice Desktop Hub — Central Desktop Window
 Tier-1, consumer-grade desktop application window with obsidian theme, sidebar navigation,
 modular views, and backwards compatibility with existing audio/key tests.
 """
-import threading
 import customtkinter as ctk
 from ui.design_tokens import (
-    BG_APP, BG_SIDEBAR, BORDER_SIDEBAR, BG_CARD, BG_CARD_HOVER, BORDER_CARD,
-    SIDEBAR_ACTIVE_BG, SIDEBAR_ACTIVE_BORDER, SIDEBAR_ACTIVE_TEXT, SIDEBAR_ACTIVE_ICON,
+    BG_APP, BG_SIDEBAR, BORDER_SIDEBAR, BG_CARD, BORDER_CARD,
+    SIDEBAR_ACTIVE_BG, SIDEBAR_ACTIVE_BORDER, SIDEBAR_ACTIVE_TEXT,
     SIDEBAR_INACTIVE_TEXT, SIDEBAR_INACTIVE_HOVER,
-    ACCENT_PRIMARY, ACCENT_EMERALD, ACCENT_SKY, ACCENT_CRIMSON,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_SUBTLE,
+    ACCENT_EMERALD, ACCENT_SKY,
+    TEXT_PRIMARY, TEXT_MUTED, TEXT_SUBTLE,
     WINDOW_WIDTH, WINDOW_HEIGHT, MIN_WIDTH, MIN_HEIGHT
 )
 from ui.views.home_view import HomeView
@@ -325,9 +324,11 @@ class SettingsWindow:
         for name, view in self.views.items():
             if name == target:
                 view.grid(row=0, column=0, sticky="nsew")
-                # If history view, auto-focus search if desired
+                # If history view, auto-focus search if desired.
+                # Bind `view` as a default argument: the loop variable would
+                # otherwise be rebound before the scheduled callback fires.
                 if name == "🕒 History" and hasattr(view, "search_entry"):
-                    self.window.after(50, lambda: view.search_entry.focus_set())
+                    self.window.after(50, lambda v=view: v.search_entry.focus_set())
             else:
                 view.grid_forget()
 
@@ -340,33 +341,35 @@ class SettingsWindow:
         self._vu_paused = False
 
     def _start_vu_monitor(self):
+        """
+        Event-driven VU meter updates, scheduled on the Tk event loop.
+
+        Uses `window.after()` instead of a background 25 Hz polling thread so the
+        settings window adds no idle thread/CPU footprint (Requirement F16) and
+        never touches Tk objects from a non-UI thread.
+        """
         self.test_running = True
         self._vu_paused = False
+        self._schedule_vu_tick()
 
-        def monitor():
-            import time
-            while self.test_running and self.is_open:
-                is_rec = getattr(self.audio_recorder, "is_recording", False) if self.audio_recorder else False
-                if self._vu_paused or is_rec:
-                    time.sleep(0.08)
-                    continue
+    def _schedule_vu_tick(self):
+        if not (self.test_running and self.is_open and self.window):
+            return
+        try:
+            self.window.after(40, self._vu_tick)
+        except Exception:
+            pass
 
-                if self.audio_recorder:
-                    vol = self.audio_recorder.get_current_volume()
-                    if self.window and self.vu_progress:
-                        def safe_set(v=vol):
-                            if self.is_open and self.window and self.vu_progress and not self._vu_paused:
-                                try:
-                                    self.vu_progress.set(v)
-                                except Exception:
-                                    pass
-                        try:
-                            self.window.after(0, safe_set)
-                        except Exception:
-                            pass
-                time.sleep(0.04)
-
-        threading.Thread(target=monitor, daemon=True).start()
+    def _vu_tick(self):
+        if not (self.test_running and self.is_open and self.window):
+            return
+        try:
+            is_rec = getattr(self.audio_recorder, "is_recording", False) if self.audio_recorder else False
+            if self.audio_recorder and self.vu_progress and not self._vu_paused and not is_rec:
+                self.vu_progress.set(self.audio_recorder.get_current_volume())
+        except Exception:
+            pass
+        self._schedule_vu_tick()
 
     def _on_device_changed(self, choice):
         if hasattr(self, "settings_view") and self.settings_view:

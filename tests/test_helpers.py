@@ -1,8 +1,5 @@
-import os
-import sys
 import math
 import struct
-import tempfile
 import numpy as np
 
 class InMemoryConfigManager:
@@ -51,11 +48,31 @@ class InMemoryConfigManager:
         self.history = []
 
     def get_productivity_stats(self, note_store=None):
+        """Mirrors ConfigManager.get_productivity_stats over the in-memory history."""
+        import datetime
+        now = datetime.datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        week_ago = now - datetime.timedelta(days=7)
+
+        words_today = dictations_today = total_words_week = 0
+        for entry in self.history:
+            ts_str = entry.get("timestamp", "")
+            wc = len(entry.get("text", "").split())
+            if ts_str.startswith(today_str):
+                words_today += wc
+                dictations_today += 1
+            try:
+                dt = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                if dt >= week_ago:
+                    total_words_week += wc
+            except Exception:
+                pass
+
         return {
-            "words_today": 1284,
-            "dictations_today": 42,
-            "time_saved_min": 18,
-            "hours_saved_week": 3.2
+            "words_today": words_today,
+            "dictations_today": dictations_today,
+            "time_saved_min": int(words_today * 0.0183),
+            "hours_saved_week": round(total_words_week * 0.0183 / 60.0, 1),
         }
 
     def get_vocabulary(self):

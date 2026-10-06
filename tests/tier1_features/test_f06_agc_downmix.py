@@ -1,8 +1,7 @@
 import unittest
 import numpy as np
-import struct
 from core.audio_recorder import AudioRecorder
-from tests.test_helpers import generate_pcm_spike, generate_pcm_audio, generate_stereo_dc_offset
+from tests.test_helpers import generate_pcm_spike, generate_stereo_dc_offset
 
 class TestF06AgcDownmix(unittest.TestCase):
     """

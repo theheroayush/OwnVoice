@@ -4,7 +4,26 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "./db";
 
-const JWT_SECRET = process.env.JWT_SECRET || "ownvoice-jwt-secret-key-production-ready-32-bytes";
+const DEV_JWT_SECRET = "ownvoice-insecure-dev-jwt-secret-change-me";
+
+/**
+ * Resolves the JWT signing secret.
+ * Production deployments MUST provide a unique 32+ character JWT_SECRET —
+ * falling back to a repository-known default would let anyone forge session
+ * cookies. Local development keeps a throwaway default so `npm run dev` works.
+ */
+function resolveJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret && secret.length >= 32) return secret;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "JWT_SECRET is missing or too short (min 32 chars). Refusing to sign sessions with an insecure default."
+    );
+  }
+  return DEV_JWT_SECRET;
+}
+
 const COOKIE_NAME = "ov_session_token";
 
 export interface SessionUser {
@@ -31,14 +50,14 @@ export function createSessionToken(user: { id: string; email: string; role: stri
       email: user.email,
       role: user.role,
     },
-    JWT_SECRET,
+    resolveJwtSecret(),
     { expiresIn: "30d" }
   );
 }
 
 export function verifySessionToken(token: string): { sub: string; email: string; role: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as { sub: string; email: string; role: string };
+    return jwt.verify(token, resolveJwtSecret()) as { sub: string; email: string; role: string };
   } catch {
     return null;
   }

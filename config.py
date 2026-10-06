@@ -31,7 +31,9 @@ DEFAULT_CONFIG = {
         "B2B SaaS"
     ],
     "custom_instructions": "",
-    "sound_effects": True,
+    # Requirement R3 / F17: 100% silent operation — no chimes or beeps unless the
+    # user explicitly opts in from Settings.
+    "sound_effects": False,
     "input_device_index": None,
     "sample_rate": 48000,
     "overlay_position": "bottom_center",
@@ -39,10 +41,11 @@ DEFAULT_CONFIG = {
     "save_history": True,
     "history_limit": 100,
     "theme": "dark",
+    # Sample entries only — users replace these with their own text in Settings.
     "snippets": {
-        "my portfolio": "https://ayushupadhyay.com",
-        "meeting link": "https://cal.com/ayush",
-        "my email": "ayush@example.com"
+        "my portfolio": "https://example.com/portfolio",
+        "meeting link": "https://cal.com/example",
+        "my email": "you@example.com"
     }
 }
 
@@ -65,13 +68,23 @@ class ConfigManager:
                 config["google_api_key"] = env_key
         return config
 
+    @staticmethod
+    def _restrict_permissions(path: Path) -> None:
+        """Best-effort chmod 600 so API keys are not world-readable on POSIX."""
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
     def save_config(self) -> bool:
         try:
             with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=4)
+            self._restrict_permissions(CONFIG_FILE)
             if self.config.get("google_api_key"):
                 with open(ENV_FILE, "w", encoding="utf-8") as f:
                     f.write(f'GEMINI_API_KEY={self.config["google_api_key"]}\n')
+                self._restrict_permissions(ENV_FILE)
             return True
         except Exception as e:
             print(f"Error saving config.json: {e}")
@@ -187,17 +200,18 @@ class ConfigManager:
             except Exception:
                 pass
 
-        # If clean install with low volume, provide baseline realistic stats
-        effective_words = max(words_today, 1284 if dictations_today == 0 else words_today)
-        effective_dictations = max(dictations_today, 42 if dictations_today == 0 else dictations_today)
-        
+        # Report what actually happened. (Older builds floored these numbers at
+        # 1284 words / 42 dictations / 18 minutes / 3.2 hours so the dashboard
+        # never looked empty — that invented usage data, so the floors are gone
+        # and the UI shows zeros until the user dictates something.)
+        #
         # Speaking saves ~0.018 minutes per word vs typing (150 WPM vs 40 WPM)
-        time_saved_min = max(18, int(effective_words * 0.0183))
-        hours_saved_week = round(max(3.2, (total_words_week or (effective_words * 5)) * 0.0183 / 60.0), 1)
+        time_saved_min = int(words_today * 0.0183)
+        hours_saved_week = round(total_words_week * 0.0183 / 60.0, 1)
 
         return {
-            "words_today": effective_words,
-            "dictations_today": effective_dictations,
+            "words_today": words_today,
+            "dictations_today": dictations_today,
             "time_saved_min": time_saved_min,
             "hours_saved_week": hours_saved_week
         }

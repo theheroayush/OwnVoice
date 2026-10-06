@@ -36,3 +36,15 @@ wispr_preview_test.png
 .DS_Store
 Thumbs.db
 .agents/
+
+# Generated build artifacts
+*.tsbuildinfo
+
+# Personal/runtime data (never commit a user's dictation history)
+history.json
+
+# Stray local test recordings
+test_loopback_recording.wav
+
+# Android build outputs (published installers live in releases/)
+android/*.apk

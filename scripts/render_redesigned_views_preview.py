@@ -6,7 +6,7 @@ Renders a visual showcase of the 4 newly designed screens in the OwnVoice Deskto
 4. 🕒 History (Date-Grouped Transcripts & Metadata Inspector)
 """
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 ARTIFACT_DIR = Path(r"C:\Users\ayush\.gemini\antigravity\brain\5ea4f4e3-15d7-4c21-9504-b5fbba15d970")
 OUT_FILE = ARTIFACT_DIR / "desktop_views_preview.png"
@@ -50,7 +50,7 @@ def create_preview():
         ("VS Code", "💻 VS Code", "Concise", "refactor(engine): optimize token buffer"),
         ("Outlook", "✉️ Outlook", "Formal", "Please let me know your availability.")
     ]
-    for idx, (app, label, tone, sample) in enumerate(rows):
+    for idx, (_app, label, tone, sample) in enumerate(rows):
         ry = y1 + 175 + idx * 45
         draw.text((x1 + 24, ry), label, fill=(248, 250, 252, 255))
         draw.rounded_rectangle([x1 + 160, ry - 4, x1 + 240, ry + 20], radius=4, fill=(30, 41, 59, 255))
@@ -144,7 +144,7 @@ def create_preview():
         ("11:30 AM", "✉️ Teams", "Formal", "Please find the architectural review document attached.", False)
     ]
     hy = y4 + 90
-    for time_s, app_s, tone_s, snippet, is_active in h_items:
+    for time_s, app_s, _tone_s, snippet, is_active in h_items:
         if app_s is None:
             draw.text((x4 + 20, hy + 4), time_s, fill=(71, 85, 105, 255))
             hy += 24

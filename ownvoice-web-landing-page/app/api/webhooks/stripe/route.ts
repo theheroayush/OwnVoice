@@ -2,11 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { generateLicenseKey } from "@/lib/license";
 import { logEvent, logAudit } from "@/lib/analytics";
+import { verifyStripeSignature } from "@/lib/webhook-verify";
+
+export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
     const sig = req.headers.get("stripe-signature");
+
+    // Fail closed: without a verified signature anyone could POST a fake
+    // "checkout.session.completed" event and mint a free lifetime license.
+    const verification = verifyStripeSignature(
+      rawBody,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+    if (!verification.ok) {
+      console.error("Rejected Stripe webhook:", verification.reason);
+      return NextResponse.json({ error: verification.reason }, { status: 401 });
+    }
 
     let event: any;
     try {
@@ -21,6 +36,14 @@ export async function POST(req: NextRequest) {
 
       if (userId) {
         const transactionId = session.id || `tx_stripe_${Date.now()}`;
+
+        // Idempotency: gateways retry deliveries, so never create a second
+        // purchase/license for a transaction we already recorded.
+        const existing = await prisma.purchase.findUnique({ where: { transactionId } });
+        if (existing) {
+          return NextResponse.json({ received: true, duplicate: true });
+        }
+
         const newLicenseKey = generateLicenseKey();
 
         await prisma.$transaction([
@@ -57,4 +80,10 @@ export async function POST(req: NextRequest) {
     console.error("Stripe webhook error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+}
+
+export async function GET() {
+  // Webhooks are POST-only; answering GET with 405 avoids leaking whether the
+  // endpoint is configured.
+  return NextResponse.json({ error: "Method Not Allowed" }, { status: 405 });
 }

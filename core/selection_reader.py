@@ -1,7 +1,7 @@
 import sys
 import time
 import ctypes
-from typing import Optional, Tuple
+from typing import Optional
 from pynput.keyboard import Controller, Key
 
 IS_WINDOWS = sys.platform == "win32"

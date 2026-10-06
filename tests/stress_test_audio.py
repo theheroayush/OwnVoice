@@ -9,8 +9,6 @@ Covers:
 """
 
 import os
-import math
-import struct
 import subprocess
 import sys
 import threading
@@ -47,7 +45,7 @@ class TestAudioStressDeviceIndices(unittest.TestCase):
         initial_threads = threading.active_count()
         latencies = []
 
-        for cycle in range(2):  # 2 full passes = 20 switches
+        for _cycle in range(2):  # 2 full passes = 20 switches
             for idx in bogus_indices:
                 t0 = time.perf_counter()
                 self.recorder.start_recording(device_index=idx)
@@ -110,7 +108,7 @@ class TestAudioStressConcurrency(unittest.TestCase):
             recorder.start_recording()
             vol2 = recorder.get_current_volume()
             self.assertTrue(0.0 <= vol2 <= 1.0)
-            audio = recorder.stop_recording()
+            recorder.stop_recording()
             recorder.stop_monitoring()
 
     def test_concurrent_stream_unsynchronized_race_vulnerability(self):

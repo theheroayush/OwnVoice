@@ -1,6 +1,8 @@
 generator client {
-  provider   = "prisma-client-js"
-  engineType = "binary"
+  // Uses the default (library) query engine. The legacy `engineType = "binary"`
+  // spawns an out-of-process engine binary which is slower, unsupported on
+  // serverless hosts (Vercel/Netlify) and removed in Prisma 7.
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -43,6 +45,9 @@ model License {
   activatedAt   DateTime  @default(now())
   expiresAt     DateTime?
   createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
 }
 
 model Purchase {
@@ -58,6 +63,9 @@ model Purchase {
   purchasedAt   DateTime  @default(now())
   metadata      String?   // JSON string
   license       License?
+
+  @@index([userId])
+  @@index([status])
 }
 
 model UserProvider {
@@ -86,6 +94,8 @@ model Recording {
   createdAt     DateTime       @default(now())
   transcript    Transcript?
   generation    Generation?
+
+  @@index([userId])
 }
 
 model Transcript {
@@ -118,6 +128,9 @@ model Generation {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   versions      GenerationVersion[]
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model GenerationVersion {
@@ -127,6 +140,8 @@ model GenerationVersion {
   actionTaken   String      // INITIAL, REWRITE_CASUAL, REWRITE_PROFESSIONAL, SHORTEN, EXPAND, SUMMARIZE
   outputText    String
   createdAt     DateTime    @default(now())
+
+  @@index([generationId])
 }
 
 model Prompt {
@@ -148,6 +163,8 @@ model CustomInstruction {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model UserSettings {
@@ -171,6 +188,8 @@ model Device {
   clientType  String    // WEB, DESKTOP_WINDOWS, DESKTOP_MAC, MOBILE
   lastActive  DateTime  @default(now())
   createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model UsageEvent {
@@ -180,6 +199,10 @@ model UsageEvent {
   eventType   String    // landing_view, recording_started, generation_completed, etc.
   metadata    String?   // JSON
   createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
 }
 
 model AuditLog {
@@ -190,4 +213,6 @@ model AuditLog {
   ipAddress   String?
   userAgent   String?
   createdAt   DateTime  @default(now())
+
+  @@index([userId])
 }

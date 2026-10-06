@@ -1,10 +1,8 @@
 import unittest
-import math
 import ctypes
-import threading
 import time
 from typing import Optional
-from ui.floating_widget import FloatingWidget, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST
+from ui.floating_widget import FloatingWidget, GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW
 from ui.settings_window import SettingsWindow
 from ui.tray_icon import TrayIcon
 from tests.test_helpers import InMemoryConfigManager

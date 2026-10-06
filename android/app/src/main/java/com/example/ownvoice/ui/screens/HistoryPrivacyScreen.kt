@@ -454,14 +454,16 @@ fun HistoryPrivacyScreen(
 
                             OutlinedButton(
                                 onClick = {
-                                    apiKeyInput = SecureConfig.DEFAULT_API_KEY
-                                    app.secureConfig.apiKey = SecureConfig.DEFAULT_API_KEY
-                                    apiStatusMessage = "Reset to default key."
+                                    // No key is bundled with the app — clearing simply
+                                    // forgets the user's own (BYOK) key.
+                                    apiKeyInput = ""
+                                    app.secureConfig.apiKey = ""
+                                    apiStatusMessage = "API key cleared."
                                 },
                                 border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Text("Reset Default", color = DesignTokens.Colors.TextPrimary)
+                                Text("Clear Key", color = DesignTokens.Colors.TextPrimary)
                             }
                         }
                     }

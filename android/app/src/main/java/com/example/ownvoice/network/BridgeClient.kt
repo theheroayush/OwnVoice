@@ -208,7 +208,7 @@ class BridgeClient(
                                             token = json.optString("token", ""),
                                             apiKey = json.optString("api_key", "")
                                         )
-                                        if (desktop.apiKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                                        if (desktop.apiKey.isNotBlank() && (config?.needsApiKey == true)) {
                                             config?.apiKey = desktop.apiKey
                                         }
                                         if (foundList.none { it.ip == desktop.ip }) {
@@ -298,7 +298,7 @@ class BridgeClient(
                             token = json.optString("token", ""),
                             apiKey = json.optString("api_key", "")
                         )
-                        if (desktop.apiKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                        if (desktop.apiKey.isNotBlank() && (config?.needsApiKey == true)) {
                             config?.apiKey = desktop.apiKey
                         }
                         if (found.none { it.ip == desktop.ip }) {
@@ -359,7 +359,7 @@ class BridgeClient(
                 val token = respJson.optString("token", "")
                 val name = respJson.optString("device_name", "Windows PC")
                 val apiKey = respJson.optString("api_key", "")
-                if (apiKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                if (apiKey.isNotBlank() && (config?.needsApiKey == true)) {
                     config?.apiKey = apiKey
                 }
                 lastError = ""
@@ -391,7 +391,7 @@ class BridgeClient(
                 val respStr = resp.body?.string() ?: "{}"
                 val json = JSONObject(respStr)
                 val returnedKey = json.optString("api_key", "")
-                if (returnedKey.isNotBlank() && (config?.isDefaultOrBlankApiKey == true)) {
+                if (returnedKey.isNotBlank() && (config?.needsApiKey == true)) {
                     config?.apiKey = returnedKey
                 }
                 val returnedToken = json.optString("token", "")
@@ -450,7 +450,7 @@ class BridgeClient(
             if (matched.pin.isNotBlank()) {
                 config?.desktopBridgePin = matched.pin
             }
-            if (matched.apiKey.isNotBlank() && config?.isDefaultOrBlankApiKey == true) {
+            if (matched.apiKey.isNotBlank() && config?.needsApiKey == true) {
                 config?.apiKey = matched.apiKey
             }
             return@withContext doInject(effectiveIp, text, port, effectiveToken)

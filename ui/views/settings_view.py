@@ -7,8 +7,7 @@ import webbrowser
 import customtkinter as ctk
 from ui.design_tokens import (
     BG_APP, BG_CARD, BG_CARD_HOVER, BORDER_CARD,
-    ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_EMERALD, ACCENT_SKY, ACCENT_CRIMSON,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED
+    ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_EMERALD, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED
 )
 
 class SettingsView(ctk.CTkFrame):
@@ -118,7 +117,7 @@ class SettingsView(ctk.CTkFrame):
         hk_menu.pack(anchor="w", padx=16, pady=(0, 14))
 
         # Sound effects toggle
-        self.sound_fx_var = ctk.BooleanVar(value=self.config.get("sound_effects", True))
+        self.sound_fx_var = ctk.BooleanVar(value=self.config.get("sound_effects", False))
         sound_cb = ctk.CTkCheckBox(
             card,
             text="Acoustic Sound Effects (Audio cues on start, stop, and transcription completion)",

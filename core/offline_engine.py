@@ -4,7 +4,7 @@ import time
 import wave
 import threading
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple
 
 try:
     import onnxruntime as ort
@@ -86,7 +86,16 @@ class OfflineWhisperEngine:
             self._is_downloading = False
 
     def transcribe(self, wav_bytes: bytes) -> Tuple[str, float]:
-        """Transcribe audio locally when offline or when cloud API fails."""
+        """
+        Transcribe audio locally when offline or when cloud API fails.
+
+        NOTE: the bundled ONNX export expects log-mel features (input shape
+        [1, 80, 3000]) and returns BPE token ids that must be decoded with the
+        Whisper vocab/merges files. Neither the mel front-end nor the tokenizer
+        is shipped in this repository, so a successful inference cannot be turned
+        into text yet. We therefore fail safe and return no text instead of
+        leaking a raw NumPy array repr into the user's document.
+        """
         start_time = time.time()
 
         if not self.is_model_available() or self.session is None:
@@ -105,10 +114,18 @@ class OfflineWhisperEngine:
 
             inputs = {self.session.get_inputs()[0].name: audio_data[np.newaxis, :min(len(audio_data), 16000 * 30)]}
             outputs = self.session.run(None, inputs)
-            text = str(outputs[0]) if outputs else ""
+
+            # Token ids cannot be decoded without the Whisper tokenizer, so the
+            # result is intentionally discarded (see docstring).
+            if outputs and getattr(outputs[0], "ndim", 0) > 0:
+                print(
+                    "[OfflineWhisperEngine] Model ran, but the Whisper tokenizer "
+                    "(vocab.json/merges.txt) is not bundled — discarding raw token output."
+                )
+                return ("", time.time() - start_time)
 
             latency = time.time() - start_time
-            return (text.strip(), latency)
+            return ("", latency)
         except Exception as e:
             print(f"[OfflineWhisperEngine] Inference error: {e}")
             return ("", time.time() - start_time)

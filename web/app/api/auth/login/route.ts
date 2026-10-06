@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { createSessionToken, setSessionCookie, verifyPassword } from "@/lib/auth";
+import { clearFailures, clientIp, isLockedOut, recordFailure } from "@/lib/rate-limit";
+
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_SECONDS = 300;
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,6 +19,20 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const rateKey = `login:${clientIp(req)}:${normalizedEmail}`;
+
+    // Password guessing must be expensive: after a handful of failures the
+    // caller is locked out for the remainder of the window.
+    const lock = isLockedOut(rateKey, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_SECONDS);
+    if (!lock.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Too many failed sign-in attempts. Please try again in ${lock.retryAfterSeconds} seconds.`,
+        },
+        { status: 429, headers: { "Retry-After": String(lock.retryAfterSeconds) } }
+      );
+    }
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
       include: {
@@ -25,6 +43,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!user) {
+      recordFailure(rateKey, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_SECONDS);
       return NextResponse.json(
         { success: false, error: "Invalid email or password." },
         { status: 401 }
@@ -40,11 +59,19 @@ export async function POST(req: NextRequest) {
 
     const isValid = await verifyPassword(password, user.passwordHash);
     if (!isValid) {
+      const result = recordFailure(rateKey, LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_SECONDS);
       return NextResponse.json(
-        { success: false, error: "Invalid email or password." },
+        {
+          success: false,
+          error: result.allowed
+            ? "Invalid email or password."
+            : "Too many failed sign-in attempts. Please try again later.",
+        },
         { status: 401 }
       );
     }
+
+    clearFailures(rateKey);
 
     await prisma.user.update({
       where: { id: user.id },

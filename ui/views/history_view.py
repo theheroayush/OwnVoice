@@ -4,13 +4,11 @@ Matches media_1789815650246.png with date groupings (Today, Yesterday, Sep 16),
 app pills (Email, WhatsApp, Notion, VS Code, Teams, Chrome, ChatGPT), active selection border,
 and comprehensive metadata inspector card.
 """
-import tkinter as tk
 import customtkinter as ctk
 import datetime
 from ui.design_tokens import (
     BG_APP, BG_CARD, BG_CARD_HOVER, BORDER_CARD,
-    ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_SKY, ACCENT_CRIMSON, ACCENT_AMBER,
-    TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_SUBTLE,
+    ACCENT_PRIMARY, ACCENT_PRIMARY_HOVER, ACCENT_SKY, ACCENT_CRIMSON, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, TEXT_SUBTLE,
     get_badge_colors
 )
 

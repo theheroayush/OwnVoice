@@ -77,7 +77,7 @@ class TestTier2PerformanceUiBoundaries(unittest.TestCase):
 
     def test_b_f15_config_manager_repeated_lookups_memory_stable(self):
         """Verify 10,000 config.get() calls don't leak memory or references."""
-        for i in range(10000):
+        for _ in range(10000):
             val = self.config.get("hotkey", "f8")
             self.assertEqual(val, "f8")
 
@@ -265,7 +265,6 @@ class TestTier2PerformanceUiBoundaries(unittest.TestCase):
     def test_b_f20_window_pos_flags_constants(self):
         """Verify Win32 SetWindowPos SWP flags have correct integer values."""
         SWP_NOSIZE = 0x0001
-        SWP_NOMOVE = 0x0002
         SWP_NOZORDER = 0x0004
         SWP_NOACTIVATE = 0x0010
         self.assertEqual(SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE, 0x0015)

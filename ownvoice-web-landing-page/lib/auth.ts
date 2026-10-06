@@ -4,8 +4,29 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "./db";
 
-const JWT_SECRET = process.env.JWT_SECRET || "ownvoice-jwt-secret-key-production-ready-32-bytes";
 const COOKIE_NAME = "ov_session_token";
+const DEV_JWT_SECRET = "ownvoice-insecure-dev-jwt-secret-change-me";
+
+/**
+ * Resolves the JWT signing secret.
+ *
+ * In production a real secret (<code>JWT_SECRET</code>) is mandatory: the app
+ * refuses to sign/verify sessions with a publicly known development fallback,
+ * because that would let anyone forge a session cookie for any account.
+ * In development we fall back to a throwaway value so local setup stays easy.
+ */
+function resolveJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (secret && secret.length >= 32) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      secret
+        ? "JWT_SECRET must be at least 32 characters long."
+        : "JWT_SECRET is not set. Generate one with: node -e \"crypto.randomBytes(32).toString('hex')\""
+    );
+  }
+  return secret || DEV_JWT_SECRET;
+}
 
 export interface SessionUser {
   id: string;
@@ -31,14 +52,14 @@ export function createSessionToken(user: { id: string; email: string; role: stri
       email: user.email,
       role: user.role,
     },
-    JWT_SECRET,
+    resolveJwtSecret(),
     { expiresIn: "30d" }
   );
 }
 
 export function verifySessionToken(token: string): { sub: string; email: string; role: string } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as { sub: string; email: string; role: string };
+    return jwt.verify(token, resolveJwtSecret()) as { sub: string; email: string; role: string };
   } catch {
     return null;
   }

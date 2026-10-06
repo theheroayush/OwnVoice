@@ -38,7 +38,6 @@ class SecureConfig(context: Context) {
         private const val KEY_GIST_ID = "gist_id"
         private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback_enabled"
         private const val KEY_USE_FOR_PC = "use_for_pc_enabled"
-        const val DEFAULT_API_KEY = "AQ.Ab8RN6JVp6KVzuryq8BuUZLBYBuUJCNqwECacgdSMUegi5EblA"
         private const val KEY_HISTORY_JSON = "history_json"
 
         private const val KEY_LANGUAGE = "app_language"
@@ -59,8 +58,13 @@ class SecureConfig(context: Context) {
         private const val KEY_RELAY_ROOM_TOKEN = "relay_room_token"
     }
 
-    val isDefaultOrBlankApiKey: Boolean
-        get() = apiKey.isBlank() || apiKey == DEFAULT_API_KEY
+    /**
+     * OwnVoice is BYOK (bring your own key): no provider key is bundled with
+     * the app. When this is true the UI asks the user to paste a Gemini key or
+     * to pair with the desktop app, which provisions one automatically.
+     */
+    val needsApiKey: Boolean
+        get() = apiKey.isBlank()
 
     val sharedPreferences: SharedPreferences get() = prefs
 
@@ -177,7 +181,7 @@ class SecureConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_GIST_ID, value.trim()).apply()
 
     var apiKey: String
-        get() = prefs.getString(KEY_API_KEY, "")?.trim()?.ifBlank { DEFAULT_API_KEY } ?: DEFAULT_API_KEY
+        get() = prefs.getString(KEY_API_KEY, "")?.trim() ?: ""
         set(value) = prefs.edit().putString(KEY_API_KEY, value.trim()).apply()
 
     var dictationMode: String

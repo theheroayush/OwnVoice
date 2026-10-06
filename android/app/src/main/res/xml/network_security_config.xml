@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext traffic remains permitted because the OwnVoice Ecosystem Bridge
+  (desktop companion) is reached over plain HTTP on the local Wi-Fi network
+  (http://<lan-ip>:8765) and cannot present a public TLS certificate.
+
+  User-installed CAs are intentionally NOT trusted: this app stores BYOK API
+  keys, and trusting user CAs would let malware/MITM proxies intercept HTTPS
+  calls to the AI providers. Debug builds that need a proxy CA can override
+  this file with android:networkSecurityConfig in a debug manifest.
+-->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </base-config>
 </network-security-config>

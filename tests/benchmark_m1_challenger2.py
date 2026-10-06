@@ -317,7 +317,7 @@ def run_benchmark_3_wdmks_infiltration():
         recorder.start_monitoring(device_index=idx)
         assert recorder.is_monitoring, f"Monitoring failed on device {idx}"
         assert recorder.active_device_index not in range(10, 22), f"Monitoring selected WDM-KS device {idx}"
-        vol = recorder.get_current_volume()
+        recorder.get_current_volume()
         recorder.stop_monitoring()
         assert not recorder.is_monitoring, f"Monitoring failed to stop on device {idx}"
         
