@@ -4,11 +4,11 @@
   "private": true,
   "description": "Own Voice — Voice-First AI Workspace with One-Time Purchase and BYOK",
   "scripts": {
-    "dev": "npm --prefix web run dev",
-    "build": "npm --prefix web run build",
-    "start": "npm --prefix web run start",
-    "test": "npm --prefix web run test",
-    "db:push": "npm --prefix web run db:push",
-    "db:seed": "npm --prefix web run db:seed"
+    "dev": "npm --prefix ownvoice-web-landing-page run dev",
+    "build": "npm --prefix ownvoice-web-landing-page run build",
+    "start": "npm --prefix ownvoice-web-landing-page run start",
+    "test": "npm --prefix ownvoice-web-landing-page run test",
+    "db:push": "npm --prefix ownvoice-web-landing-page run db:push",
+    "db:seed": "npm --prefix ownvoice-web-landing-page run db:seed"
   }
 }

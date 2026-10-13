@@ -22,6 +22,15 @@ class InMemoryConfigManager:
             "save_history": False,
             "history_limit": 100,
             "theme": "dark",
+            "app_styles": {
+                "WhatsApp": "More casual",
+                "Email": "Professional",
+                "Documents": "Natural",
+                "Code": "Concise",
+                "Slack Teams": "Natural",
+                "Browser / Search": "Concise",
+                "Others": "Use default style"
+            },
             "snippets": {
                 "my email": "ayush@example.com",
                 "meeting link": "https://cal.com/ayush",
@@ -51,11 +60,57 @@ class InMemoryConfigManager:
         self.history = []
 
     def get_productivity_stats(self, note_store=None):
+        import datetime
+        now = datetime.datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+        week_ago = now - datetime.timedelta(days=7)
+        words_today = 0
+        dictations_today = 0
+        total_words_week = 0
+
+        for h in self.load_history():
+            ts_str = h.get("timestamp", "")
+            text = h.get("text", "")
+            wc = len(text.split())
+            if ts_str.startswith(today_str):
+                words_today += wc
+                dictations_today += 1
+            try:
+                dt = datetime.datetime.strptime(ts_str[:19], "%Y-%m-%d %H:%M:%S")
+                if dt >= week_ago:
+                    total_words_week += wc
+            except Exception:
+                pass
+
+        if note_store:
+            try:
+                list_fn = getattr(note_store, "list_notes", getattr(note_store, "get_all_notes", None))
+                if list_fn:
+                    notes = list_fn(limit=200)
+                    for n in notes:
+                        ts = n.get("created_at", "")
+                        content = n.get("structured_content", "") or n.get("raw_transcript", "")
+                        wc = len(content.split())
+                        if ts.startswith(today_str):
+                            words_today += wc
+                            dictations_today += 1
+                        try:
+                            dt = datetime.datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
+                            if dt >= week_ago:
+                                total_words_week += wc
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+        time_saved_min = round(words_today * 0.0183) if words_today > 0 else 0
+        hours_saved_week = round(total_words_week * 0.0183 / 60.0, 1) if total_words_week > 0 else 0.0
+
         return {
-            "words_today": 1284,
-            "dictations_today": 42,
-            "time_saved_min": 18,
-            "hours_saved_week": 3.2
+            "words_today": words_today,
+            "dictations_today": dictations_today,
+            "time_saved_min": time_saved_min,
+            "hours_saved_week": hours_saved_week
         }
 
     def get_vocabulary(self):

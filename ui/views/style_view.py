@@ -146,6 +146,9 @@ class StyleView(ctk.CTkFrame):
             ("🔲", "Others", ["Use default style", "Natural", "Formal"], "Use default style", "Follows your default style")
         ]
 
+        saved_app_styles = self.config.get("app_styles", {})
+        self.app_style_menus = {}
+
         for icon, app_name, options, def_choice, sample in apps_table:
             row = ctk.CTkFrame(app_card, fg_color="transparent", height=38)
             row.pack(fill="x", padx=16, pady=3)
@@ -157,6 +160,10 @@ class StyleView(ctk.CTkFrame):
             left_label.grid(row=0, column=0, sticky="w")
             ctk.CTkLabel(left_label, text=f"{icon}  {app_name}", font=ctk.CTkFont(size=12, weight="bold"), text_color=TEXT_PRIMARY).pack(side="left")
 
+            current_choice = saved_app_styles.get(app_name, def_choice)
+            if current_choice not in options:
+                current_choice = def_choice
+
             opt = ctk.CTkOptionMenu(
                 row,
                 values=options,
@@ -166,10 +173,12 @@ class StyleView(ctk.CTkFrame):
                 button_color="#1E293B",
                 button_hover_color=BG_CARD_HOVER,
                 dropdown_fg_color=BG_CARD,
-                font=ctk.CTkFont(size=11)
+                font=ctk.CTkFont(size=11),
+                command=lambda choice, a=app_name: self._on_app_style_changed(a, choice)
             )
-            opt.set(def_choice)
+            opt.set(current_choice)
             opt.grid(row=0, column=1, sticky="w", padx=8)
+            self.app_style_menus[app_name] = opt
 
             sample_lbl = ctk.CTkLabel(row, text=sample, font=ctk.CTkFont(size=11), text_color=TEXT_MUTED)
             sample_lbl.grid(row=0, column=2, sticky="w", padx=8)
@@ -329,3 +338,8 @@ class StyleView(ctk.CTkFrame):
 
     def _on_auto_ctx_changed(self):
         self.config.set("auto_context", self.auto_ctx_var.get())
+
+    def _on_app_style_changed(self, app_name: str, choice: str):
+        app_styles = dict(self.config.get("app_styles", {}))
+        app_styles[app_name] = choice
+        self.config.set("app_styles", app_styles, save=True)

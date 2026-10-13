@@ -20,7 +20,7 @@ class ProductivityView(ctk.CTkFrame):
         self.config = config_manager
         self.note_store = note_store
         self.time_range = "7 days"
-        self.active_bar_idx = 4  # Sep 16 default active
+        self.active_bar_idx = 6  # default active index (today)
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -29,9 +29,141 @@ class ProductivityView(ctk.CTkFrame):
         self.scroll.grid(row=0, column=0, sticky="nsew", padx=24, pady=16)
         self.scroll.grid_columnconfigure(0, weight=1)
 
+        self._load_analytics_data()
         self._build_header()
         self._build_metrics_cards()
         self._build_chart_and_sidebar()
+
+    def _load_analytics_data(self):
+        import datetime
+        now = datetime.datetime.now()
+        today_str = now.strftime("%Y-%m-%d")
+
+        history = self.config.load_history() if hasattr(self.config, "load_history") else []
+        notes = []
+        if self.note_store:
+            try:
+                list_fn = getattr(self.note_store, "list_notes", getattr(self.note_store, "get_all_notes", None))
+                if list_fn:
+                    notes = list_fn(limit=500)
+            except Exception:
+                notes = []
+
+        total_words = 0
+        self.daily_word_counts = {}
+        active_dates = set()
+        app_counts = {}
+        topic_counts = {}
+
+        for h in history:
+            text = h.get("text", "")
+            wc = len(text.split())
+            total_words += wc
+            ts = h.get("timestamp", "")
+            date_part = ts[:10] if len(ts) >= 10 else today_str
+            self.daily_word_counts[date_part] = self.daily_word_counts.get(date_part, 0) + wc
+            if wc > 0:
+                active_dates.add(date_part)
+
+            app_raw = h.get("app") or h.get("process") or ""
+            if not app_raw:
+                m = h.get("mode", "smart_flow")
+                if "code" in m: app_name = "VS Code"
+                elif "email" in m: app_name = "Email"
+                elif "chat" in m: app_name = "Slack / Teams"
+                else: app_name = "Desktop"
+            else:
+                app_lower = app_raw.lower()
+                if "code" in app_lower: app_name = "VS Code"
+                elif "slack" in app_lower or "teams" in app_lower: app_name = "Slack / Teams"
+                elif "whatsapp" in app_lower: app_name = "WhatsApp"
+                elif "outlook" in app_lower or "mail" in app_lower or "email" in app_lower: app_name = "Email"
+                elif "notion" in app_lower or "obsidian" in app_lower: app_name = "Notion / Docs"
+                elif "chrome" in app_lower or "edge" in app_lower or "browser" in app_lower: app_name = "Browser"
+                else: app_name = app_raw.replace(".exe", "").capitalize()
+            app_counts[app_name] = app_counts.get(app_name, 0) + 1
+
+            mode_raw = h.get("mode", "smart_flow")
+            topic_name = {
+                "smart_flow": "General & Flow",
+                "formal_email": "Work & Email",
+                "code": "Coding & Tech",
+                "chat": "Chat & Messaging",
+                "formal_document": "Docs & Writing",
+                "smart_note": "Meeting Notes",
+                "search": "Web & Research"
+            }.get(mode_raw, "Productivity")
+            topic_counts[topic_name] = topic_counts.get(topic_name, 0) + 1
+
+        for n in notes:
+            content = n.get("structured_content") or n.get("raw_transcript") or ""
+            wc = len(content.split())
+            total_words += wc
+            ts = n.get("created_at", "")
+            date_part = ts[:10] if len(ts) >= 10 else today_str
+            self.daily_word_counts[date_part] = self.daily_word_counts.get(date_part, 0) + wc
+            if wc > 0:
+                active_dates.add(date_part)
+            app_counts["Notes Store"] = app_counts.get("Notes Store", 0) + 1
+            topic_counts["Structured Notes"] = topic_counts.get("Structured Notes", 0) + 1
+
+        self.total_dictations = len(history) + len(notes)
+        self.total_words = total_words
+
+        # Streak calculation
+        curr_streak = 0
+        longest_streak = 0
+        today_d = datetime.date.today()
+        check_d = today_d if today_d.strftime("%Y-%m-%d") in active_dates else (today_d - datetime.timedelta(days=1))
+        while check_d.strftime("%Y-%m-%d") in active_dates:
+            curr_streak += 1
+            check_d -= datetime.timedelta(days=1)
+        self.current_streak = curr_streak
+
+        if active_dates:
+            sorted_dates = sorted([datetime.datetime.strptime(d, "%Y-%m-%d").date() for d in active_dates])
+            temp_streak = 1
+            max_streak = 1
+            for i in range(1, len(sorted_dates)):
+                if (sorted_dates[i] - sorted_dates[i-1]).days == 1:
+                    temp_streak += 1
+                    max_streak = max(max_streak, temp_streak)
+                elif (sorted_dates[i] - sorted_dates[i-1]).days > 1:
+                    temp_streak = 1
+            longest_streak = max_streak
+        self.longest_streak = longest_streak
+
+        total_app_events = sum(app_counts.values()) or 1
+        sorted_apps = sorted(app_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        APP_ICONS_COLORS = {
+            "VS Code": ("💻", "#38BDF8"),
+            "Email": ("✉️", "#6366F1"),
+            "WhatsApp": ("💬", "#10B981"),
+            "Slack / Teams": ("👥", "#A855F7"),
+            "Notion / Docs": ("📝", "#94A3B8"),
+            "Browser": ("🌐", "#38BDF8"),
+            "Notes Store": ("📄", "#F59E0B"),
+            "Desktop": ("🔲", "#475569")
+        }
+        self.top_apps = []
+        for name, cnt in sorted_apps:
+            pct = round((cnt / total_app_events) * 100)
+            icon, col = APP_ICONS_COLORS.get(name, ("🔲", "#6366F1"))
+            self.top_apps.append((icon, name, pct, col))
+
+        total_topic_events = sum(topic_counts.values()) or 1
+        sorted_topics = sorted(topic_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        TOPIC_COLORS = ["#6366F1", "#818CF8", "#38BDF8", "#34D399", "#94A3B8"]
+        self.top_topics = []
+        for idx, (name, cnt) in enumerate(sorted_topics):
+            pct = round((cnt / total_topic_events) * 100)
+            col = TOPIC_COLORS[idx % len(TOPIC_COLORS)]
+            self.top_topics.append((str(idx + 1), name, pct, col))
+
+        if hasattr(self.config, "get_productivity_stats"):
+            self.live_stats = self.config.get_productivity_stats(self.note_store)
+        else:
+            self.live_stats = {"words_today": 0, "dictations_today": 0, "time_saved_min": 0, "hours_saved_week": 0.0}
 
     def _build_header(self):
         hdr = ctk.CTkFrame(self.scroll, fg_color="transparent")
@@ -107,11 +239,25 @@ class ProductivityView(ctk.CTkFrame):
         for col in range(4):
             grid.grid_columnconfigure(col, weight=1)
 
+        dictations_val = f"{self.total_dictations:,}"
+        time_saved_hours = round(self.total_words * 0.0183 / 60.0, 1)
+        time_val = f"{time_saved_hours} hours" if time_saved_hours >= 1.0 else (f"{round(self.total_words * 0.0183)} mins" if self.total_words > 0 else "0 hours")
+        words_val = f"{self.total_words:,}"
+        accuracy_val = "98%" if self.total_dictations > 0 else "0%"
+
+        words_today = self.live_stats.get("words_today", 0)
+        dictations_today = self.live_stats.get("dictations_today", 0)
+
+        trend_dictations = f"{dictations_today} today" if self.total_dictations > 0 else "No data"
+        trend_time = f"{self.live_stats.get('hours_saved_week', 0.0)}h this week" if self.total_dictations > 0 else "No data"
+        trend_words = f"{words_today:,} today" if self.total_dictations > 0 else "No data"
+        trend_acc = "Estimated" if self.total_dictations > 0 else "No data"
+
         metrics = [
-            ("📄", "248", "Dictations", "+12% vs last week"),
-            ("🕒", "12.4 hours", "Time saved", "+18% vs last week"),
-            ("📝", "18,492", "Words created", "+25% vs last week"),
-            ("⚡", "98%", "Accuracy", "+2% vs last week")
+            ("📄", dictations_val, "Dictations", trend_dictations),
+            ("🕒", time_val, "Time saved", trend_time),
+            ("📝", words_val, "Words created", trend_words),
+            ("⚡", accuracy_val, "Accuracy", trend_acc)
         ]
 
         for col, (icon, val, lbl, trend) in enumerate(metrics):
@@ -127,7 +273,10 @@ class ProductivityView(ctk.CTkFrame):
             bot = ctk.CTkFrame(card, fg_color="transparent")
             bot.pack(fill="x", padx=14, pady=(2, 12))
             ctk.CTkLabel(bot, text=lbl, font=ctk.CTkFont(size=11), text_color=TEXT_MUTED).pack(side="left", padx=(0, 6))
-            ctk.CTkLabel(bot, text=trend, font=ctk.CTkFont(size=10, weight="bold"), text_color=ACCENT_EMERALD, fg_color="#064E3B", corner_radius=4, padx=4, pady=1).pack(side="left")
+            is_empty_trend = (trend == "No data")
+            trend_fg = "#1E293B" if is_empty_trend else "#064E3B"
+            trend_txt_col = TEXT_MUTED if is_empty_trend else ACCENT_EMERALD
+            ctk.CTkLabel(bot, text=trend, font=ctk.CTkFont(size=10, weight="bold"), text_color=trend_txt_col, fg_color=trend_fg, corner_radius=4, padx=4, pady=1).pack(side="left")
 
     def _build_chart_and_sidebar(self):
         split = ctk.CTkFrame(self.scroll, fg_color="transparent")
@@ -183,22 +332,18 @@ class ProductivityView(ctk.CTkFrame):
         ctk.CTkLabel(apps_card, text="Top apps", font=ctk.CTkFont(size=13, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(12, 2))
         ctk.CTkLabel(apps_card, text="Where you use OwnVoice the most.", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 10))
 
-        apps = [
-            ("✉️", "Email", 38, "#6366F1"),
-            ("💬", "WhatsApp", 22, "#10B981"),
-            ("📝", "Notion", 18, "#94A3B8"),
-            ("💻", "VS Code", 12, "#38BDF8"),
-            ("🔲", "Others", 10, "#475569")
-        ]
-        for icon, name, pct, col in apps:
-            row = ctk.CTkFrame(apps_card, fg_color="transparent")
-            row.pack(fill="x", padx=16, pady=3)
-            ctk.CTkLabel(row, text=f"{icon} {name}", font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_SECONDARY, width=85, anchor="w").pack(side="left")
-            ctk.CTkLabel(row, text=f"{pct}%", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, width=35).pack(side="left")
-            bar = ctk.CTkProgressBar(row, height=7, progress_color=col, fg_color="#1E293B")
-            bar.set(pct / 100.0)
-            bar.pack(side="left", fill="x", expand=True, padx=(4, 0))
-        ctk.CTkLabel(apps_card, text="").pack(pady=4)
+        if not self.top_apps:
+            ctk.CTkLabel(apps_card, text="No app telemetry yet.\nStart dictating to see app usage.", font=ctk.CTkFont(size=11, slant="italic"), text_color=TEXT_MUTED, justify="left").pack(anchor="w", padx=16, pady=(10, 16))
+        else:
+            for icon, name, pct, col in self.top_apps:
+                row = ctk.CTkFrame(apps_card, fg_color="transparent")
+                row.pack(fill="x", padx=16, pady=3)
+                ctk.CTkLabel(row, text=f"{icon} {name}", font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_SECONDARY, width=95, anchor="w").pack(side="left")
+                ctk.CTkLabel(row, text=f"{pct}%", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, width=35).pack(side="left")
+                bar = ctk.CTkProgressBar(row, height=7, progress_color=col, fg_color="#1E293B")
+                bar.set(pct / 100.0)
+                bar.pack(side="left", fill="x", expand=True, padx=(4, 0))
+            ctk.CTkLabel(apps_card, text="").pack(pady=4)
 
         # Popular Topics
         topics_card = ctk.CTkFrame(bottom_row, fg_color=BG_CARD, corner_radius=12, border_color=BORDER_CARD, border_width=1)
@@ -207,37 +352,38 @@ class ProductivityView(ctk.CTkFrame):
         ctk.CTkLabel(topics_card, text="Popular topics", font=ctk.CTkFont(size=13, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w", padx=16, pady=(12, 2))
         ctk.CTkLabel(topics_card, text="What you talk about most.", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED).pack(anchor="w", padx=16, pady=(0, 10))
 
-        topics = [
-            ("1", "Work & Meetings", 32, "#6366F1"),
-            ("2", "Product Ideas", 18, "#818CF8"),
-            ("3", "Personal Notes", 14, "#38BDF8"),
-            ("4", "Team Updates", 12, "#34D399"),
-            ("5", "Learning & Research", 10, "#94A3B8")
-        ]
-        for rank, name, pct, col in topics:
-            row = ctk.CTkFrame(topics_card, fg_color="transparent")
-            row.pack(fill="x", padx=16, pady=3)
-            ctk.CTkLabel(row, text=f"{rank}  {name}", font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_SECONDARY, width=120, anchor="w").pack(side="left")
-            ctk.CTkLabel(row, text=f"{pct}%", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, width=32).pack(side="left")
-            bar = ctk.CTkProgressBar(row, height=7, progress_color=col, fg_color="#1E293B")
-            bar.set(pct / 100.0)
-            bar.pack(side="left", fill="x", expand=True, padx=(4, 0))
-        ctk.CTkLabel(topics_card, text="").pack(pady=4)
+        if not self.top_topics:
+            ctk.CTkLabel(topics_card, text="No topics classified yet.\nStart dictating to view topics.", font=ctk.CTkFont(size=11, slant="italic"), text_color=TEXT_MUTED, justify="left").pack(anchor="w", padx=16, pady=(10, 16))
+        else:
+            for rank, name, pct, col in self.top_topics:
+                row = ctk.CTkFrame(topics_card, fg_color="transparent")
+                row.pack(fill="x", padx=16, pady=3)
+                ctk.CTkLabel(row, text=f"{rank}  {name}", font=ctk.CTkFont(size=11, weight="bold"), text_color=TEXT_SECONDARY, width=120, anchor="w").pack(side="left")
+                ctk.CTkLabel(row, text=f"{pct}%", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, width=32).pack(side="left")
+                bar = ctk.CTkProgressBar(row, height=7, progress_color=col, fg_color="#1E293B")
+                bar.set(pct / 100.0)
+                bar.pack(side="left", fill="x", expand=True, padx=(4, 0))
+            ctk.CTkLabel(topics_card, text="").pack(pady=4)
 
         # Right Column: Streaks, Achievements & Impact
         right = ctk.CTkFrame(split, fg_color="transparent")
         right.grid(row=0, column=1, sticky="nsew")
 
-        # Card 1: You're on a roll
+        # Card 1: Streak / Roll
         c1 = ctk.CTkFrame(right, fg_color="#1E2038", corner_radius=10, border_color="#3B3D6A", border_width=1)
         c1.pack(fill="x", pady=(0, 10))
         c1_top = ctk.CTkFrame(c1, fg_color="transparent")
         c1_top.pack(fill="x", padx=14, pady=(12, 4))
-        ctk.CTkLabel(c1_top, text="🏆", font=ctk.CTkFont(size=18)).pack(side="left", padx=(0, 8))
-        ctk.CTkLabel(c1_top, text="You're on a roll!", font=ctk.CTkFont(size=13, weight="bold"), text_color=TEXT_PRIMARY).pack(side="left")
-        ctk.CTkLabel(c1, text="You've used OwnVoice for 7 days in a row. Keep going!", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, wraplength=260, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
+        if self.current_streak > 0:
+            ctk.CTkLabel(c1_top, text="🏆", font=ctk.CTkFont(size=18)).pack(side="left", padx=(0, 8))
+            ctk.CTkLabel(c1_top, text="You're on a roll!", font=ctk.CTkFont(size=13, weight="bold"), text_color=TEXT_PRIMARY).pack(side="left")
+            ctk.CTkLabel(c1, text=f"You've used OwnVoice for {self.current_streak} days in a row. Keep going!", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, wraplength=260, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
+        else:
+            ctk.CTkLabel(c1_top, text="🚀", font=ctk.CTkFont(size=18)).pack(side="left", padx=(0, 8))
+            ctk.CTkLabel(c1_top, text="Ready to start!", font=ctk.CTkFont(size=13, weight="bold"), text_color=TEXT_PRIMARY).pack(side="left")
+            ctk.CTkLabel(c1, text="Press F8 anywhere to start speaking and build your streak.", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, wraplength=260, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
 
-        # Card 2: Streak
+        # Card 2: Streak Numbers
         c2 = ctk.CTkFrame(right, fg_color=BG_CARD, corner_radius=10, border_color=BORDER_CARD, border_width=1)
         c2.pack(fill="x", pady=(0, 10))
         c2_top = ctk.CTkFrame(c2, fg_color="transparent")
@@ -251,12 +397,12 @@ class ProductivityView(ctk.CTkFrame):
         
         s1 = ctk.CTkFrame(c2_stats, fg_color="transparent")
         s1.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(s1, text="7 days", font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w")
+        ctk.CTkLabel(s1, text=f"{self.current_streak} days", font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w")
         ctk.CTkLabel(s1, text="Current streak", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED).pack(anchor="w")
 
         s2 = ctk.CTkFrame(c2_stats, fg_color="transparent")
         s2.grid(row=0, column=1, sticky="w")
-        ctk.CTkLabel(s2, text="14 days", font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w")
+        ctk.CTkLabel(s2, text=f"{self.longest_streak} days", font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w")
         ctk.CTkLabel(s2, text="Longest streak", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED).pack(anchor="w")
 
         # Card 3: Time saved
@@ -266,8 +412,11 @@ class ProductivityView(ctk.CTkFrame):
         c3_top.pack(fill="x", padx=14, pady=(12, 2))
         ctk.CTkLabel(c3_top, text="🕒 Time saved", font=ctk.CTkFont(size=12, weight="bold"), text_color=ACCENT_SKY).pack(side="left")
         ctk.CTkLabel(c3_top, text="›", font=ctk.CTkFont(size=14, weight="bold"), text_color=TEXT_MUTED).pack(side="right")
-        ctk.CTkLabel(c3, text="12.4 hours", font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w", padx=14)
-        ctk.CTkLabel(c3, text="That's like 1.5 working days back in your pocket!", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, wraplength=260, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
+        total_hours_saved = round(self.total_words * 0.0183 / 60.0, 1)
+        time_text = f"{total_hours_saved} hours" if total_hours_saved >= 1.0 else (f"{round(self.total_words * 0.0183)} mins" if self.total_words > 0 else "0 hours")
+        ctk.CTkLabel(c3, text=time_text, font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w", padx=14)
+        c3_sub = f"Saved {self.live_stats.get('time_saved_min', 0)}m today • {self.live_stats.get('hours_saved_week', 0.0)}h this week." if self.total_words > 0 else "Start speaking to reclaim your time."
+        ctk.CTkLabel(c3, text=c3_sub, font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, wraplength=260, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
 
         # Card 4: Environmental Impact
         c4 = ctk.CTkFrame(right, fg_color=BG_CARD, corner_radius=10, border_color=BORDER_CARD, border_width=1)
@@ -276,47 +425,87 @@ class ProductivityView(ctk.CTkFrame):
         c4_top.pack(fill="x", padx=14, pady=(12, 2))
         ctk.CTkLabel(c4_top, text="🌱 Your impact", font=ctk.CTkFont(size=12, weight="bold"), text_color=ACCENT_EMERALD).pack(side="left")
         ctk.CTkLabel(c4_top, text="›", font=ctk.CTkFont(size=14, weight="bold"), text_color=TEXT_MUTED).pack(side="right")
-        ctk.CTkLabel(c4, text="~2.4 kg CO₂ saved", font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w", padx=14)
+        co2_saved = round(self.total_words * 0.00013, 2)
+        ctk.CTkLabel(c4, text=f"~{co2_saved} kg CO₂ saved" if self.total_words > 0 else "0 kg CO₂ saved", font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_PRIMARY).pack(anchor="w", padx=14)
         ctk.CTkLabel(c4, text="By typing less and thinking more.", font=ctk.CTkFont(size=11), text_color=TEXT_MUTED).pack(anchor="w", padx=14, pady=(0, 12))
 
-        # Card 5: 3x more productive
+        # Card 5: Speed Boost Badge
         c5 = ctk.CTkFrame(right, fg_color="#1E2038", corner_radius=10, border_color="#3B3D6A", border_width=1)
         c5.pack(fill="x")
         c5_top = ctk.CTkFrame(c5, fg_color="transparent")
         c5_top.pack(fill="x", padx=14, pady=(12, 2))
         ctk.CTkLabel(c5_top, text="✨ You're 3× more productive!", font=ctk.CTkFont(size=12, weight="bold"), text_color="#A5B4FC").pack(side="left")
         ctk.CTkLabel(c5_top, text="›", font=ctk.CTkFont(size=14, weight="bold"), text_color=TEXT_MUTED).pack(side="right")
-        ctk.CTkLabel(c5, text="Users like you save an average of 10+ hours every week with OwnVoice.", font=ctk.CTkFont(size=10), text_color=TEXT_MUTED, wraplength=260, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
+        c5_desc = f"You have dictated {self.total_words:,} words across {self.total_dictations} sessions." if self.total_words > 0 else "Users like you save an average of 10+ hours every week with OwnVoice."
+        ctk.CTkLabel(c5, text=c5_desc, font=ctk.CTkFont(size=10), text_color=TEXT_MUTED, wraplength=260, justify="left").pack(anchor="w", padx=14, pady=(0, 12))
 
     def _draw_chart(self):
         if not hasattr(self, "chart_canvas"):
             return
-        
+
         w = self.chart_canvas.winfo_width() or 540
         h = 170
         self.chart_canvas.delete("all")
 
-        days = ["Sep 12", "Sep 13", "Sep 14", "Sep 15", "Sep 16", "Sep 17", "Sep 18"]
-        values = [1820, 2150, 2410, 2850, 3124, 2300, 2560]
-        max_val = 4000
-
+        import datetime
+        now = datetime.datetime.now()
         left_margin = 35
         bottom_margin = 25
         chart_w = w - left_margin - 20
         chart_h = h - bottom_margin - 30
 
+        days = []
+        date_keys = []
+        if self.time_range == "7 days":
+            for i in range(6, -1, -1):
+                d = now - datetime.timedelta(days=i)
+                days.append(d.strftime("%b %d"))
+                date_keys.append([d.strftime("%Y-%m-%d")])
+        elif self.time_range == "30 days":
+            for i in range(6, -1, -1):
+                end_d = now - datetime.timedelta(days=i * 4)
+                days.append(end_d.strftime("%b %d"))
+                date_keys.append([(end_d - datetime.timedelta(days=k)).strftime("%Y-%m-%d") for k in range(4)])
+        elif self.time_range == "3 months":
+            for i in range(6, -1, -1):
+                end_d = now - datetime.timedelta(days=i * 13)
+                days.append(end_d.strftime("%b %d"))
+                date_keys.append([(end_d - datetime.timedelta(days=k)).strftime("%Y-%m-%d") for k in range(13)])
+        else:  # "All time"
+            for i in range(6, -1, -1):
+                end_d = now - datetime.timedelta(days=i * 30)
+                days.append(end_d.strftime("%b %Y"))
+                date_keys.append([(end_d - datetime.timedelta(days=k)).strftime("%Y-%m-%d") for k in range(30)])
+
+        values = []
+        for bucket in date_keys:
+            val = sum(self.daily_word_counts.get(dk, 0) for dk in bucket)
+            values.append(val)
+
+        total_words_in_range = sum(values)
+        max_val = max(max(values) * 1.3, 100) if total_words_in_range > 0 else 100
+
         # Draw horizontal gridlines & labels
-        for y_tick, y_lbl in [(0, "0"), (0.25, "1K"), (0.5, "2K"), (0.75, "3K"), (1.0, "4K")]:
+        for y_tick, y_lbl in [(0, "0"), (0.25, f"{int(max_val * 0.25):,}"), (0.5, f"{int(max_val * 0.5):,}"), (0.75, f"{int(max_val * 0.75):,}"), (1.0, f"{int(max_val):,}")]:
             y_pos = 20 + chart_h * (1.0 - y_tick)
             self.chart_canvas.create_line(left_margin, y_pos, w - 20, y_pos, fill="#182133", width=1)
-            self.chart_canvas.create_text(left_margin - 14, y_pos, text=y_lbl, fill="#64748B", font=("Segoe UI", 9))
+            self.chart_canvas.create_text(left_margin - 14, y_pos, text=y_lbl if total_words_in_range > 0 else ("0" if y_tick == 0 else ""), fill="#64748B", font=("Segoe UI", 9))
 
-        # Draw bars
         n = len(days)
         bar_w = 34
         spacing = (chart_w - (n * bar_w)) / (n + 1)
-
         self._bar_coords = []
+
+        if total_words_in_range == 0:
+            self.chart_canvas.create_text(
+                left_margin + chart_w / 2, 20 + chart_h / 2,
+                text="No dictations recorded yet for this period.\nPress F8 anywhere to start speaking!",
+                fill="#64748B", font=("Segoe UI", 10, "italic"), justify="center"
+            )
+            for i in range(n):
+                bx = left_margin + spacing + i * (bar_w + spacing)
+                self.chart_canvas.create_text(bx + bar_w / 2, h - 10, text=days[i], fill="#64748B", font=("Segoe UI", 9))
+            return
 
         for i in range(n):
             val = values[i]
@@ -328,22 +517,20 @@ class ProductivityView(ctk.CTkFrame):
             is_active = (i == self.active_bar_idx)
             color = CHART_BAR_ACTIVE if is_active else CHART_BAR_DEFAULT
 
-            # Rounded bar top
-            self.chart_canvas.create_rectangle(bx, by0, bx + bar_w, by1, fill=color, outline="", width=0)
+            if bar_height > 0:
+                self.chart_canvas.create_rectangle(bx, by0, bx + bar_w, by1, fill=color, outline="", width=0)
 
-            # Date Label below
             self.chart_canvas.create_text(bx + bar_w / 2, h - 10, text=days[i], fill="#94A3B8" if is_active else "#64748B", font=("Segoe UI", 9, "bold" if is_active else "normal"))
 
             self._bar_coords.append((bx, by0, bx + bar_w, by1, i, val, days[i]))
 
-            # If active, draw floating tooltip pill above bar
-            if is_active:
+            if is_active and val > 0:
                 tip_w = 125
                 tip_h = 24
                 tip_x = bx + bar_w / 2 - tip_w / 2
                 tip_y = max(4, by0 - tip_h - 6)
                 self.chart_canvas.create_rectangle(tip_x, tip_y, tip_x + tip_w, tip_y + tip_h, fill=CHART_TOOLTIP_BG, outline="#3B3D6A", width=1)
-                self.chart_canvas.create_text(tip_x + tip_w / 2, tip_y + tip_h / 2, text=f"{days[i]}, 2026 • {val:,} words", fill="#CBD5E1", font=("Segoe UI", 8, "bold"))
+                self.chart_canvas.create_text(tip_x + tip_w / 2, tip_y + tip_h / 2, text=f"{days[i]} • {val:,} words", fill="#CBD5E1", font=("Segoe UI", 8, "bold"))
 
     def _on_canvas_hover(self, event):
         x, y = event.x, event.y

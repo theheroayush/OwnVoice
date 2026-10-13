@@ -222,16 +222,47 @@ class OwnVoiceApp:
             self.settings_ui.stop_vu_monitor()
 
         # 4. Mode Selection & App-Aware Context Detection
+        target_hwnd = getattr(self.injector, "last_target_hwnd", None) or getattr(self.injector, "target_window", None)
+        exe_name, win_title = ContextDetector.get_window_info(target_hwnd)
+        self.active_process_name = exe_name or ""
+        self.active_window_title = win_title or ""
+
         if self.is_note_session:
             self.active_context_mode = "smart_note"
             self.active_context_label = "Note Mode"
         elif self.config.get("auto_context", True):
-            self.active_context_mode, self.active_context_label = ContextDetector.detect_tone(self.injector.last_target_hwnd)
+            detected_mode, detected_label = ContextDetector.detect_tone(target_hwnd)
+            self.active_context_mode = detected_mode
+            self.active_context_label = detected_label
+
+            # Check user app_styles overrides configured in StyleView / config.json
+            app_styles = self.config.get("app_styles", {})
+            style_override = None
+            if self.active_process_name and self.active_process_name in app_styles:
+                style_override = app_styles[self.active_process_name]
+            elif self.active_context_label and self.active_context_label in app_styles:
+                style_override = app_styles[self.active_context_label]
+            elif "Others" in app_styles and app_styles["Others"] != "Use default style":
+                style_override = app_styles["Others"]
+
+            if style_override and style_override != "Use default style":
+                STYLE_CHOICE_TO_MODE = {
+                    "More casual": "casual",
+                    "Casual": "casual",
+                    "Professional": "formal_email",
+                    "Formal": "formal_email",
+                    "Natural": "smart_flow",
+                    "Concise": "code",
+                    "Technical": "code",
+                }
+                mode_override = STYLE_CHOICE_TO_MODE.get(style_override)
+                if mode_override:
+                    self.active_context_mode = mode_override
         else:
             self.active_context_mode = self.config.get("dictation_mode", "smart_flow")
             self.active_context_label = ""
 
-        log_event(f"Recording started ({'Note Taker' if self.is_note_session else 'Dictation'}) [Context: {self.active_context_label} -> {self.active_context_mode}]")
+        log_event(f"Recording started ({'Note Taker' if self.is_note_session else 'Dictation'}) [Context: {self.active_context_label} (App: {self.active_process_name}) -> {self.active_context_mode}]")
 
         if self.config.get("sound_effects", False):
             sound_effects.play_start()
@@ -240,10 +271,22 @@ class OwnVoiceApp:
             self.overlay.root.after(0, self.overlay.show)
             self.overlay.root.after(0, lambda: self.overlay.show_recording(self.active_context_label, is_note_mode=self.is_note_session))
             
+        # Launch Gemini Live WebSocket session in the background
+        threading.Thread(
+            target=lambda: self.ai_engine.start_live_session(
+                mode=self.active_context_mode,
+                selection_context=self.current_selection
+            ),
+            daemon=True
+        ).start()
+
         try:
             dev_idx = self.config.get("input_device_index", None)
-            self.audio_recorder.start_recording(device_index=dev_idx)
-            log_event(f"Audio stream started on Device {self.audio_recorder.active_device_index} ({self.audio_recorder.sample_rate}Hz)")
+            self.audio_recorder.start_recording(
+                device_index=dev_idx,
+                chunk_callback=self.ai_engine.stream_live_chunk
+            )
+            log_event(f"Audio stream started on Device {self.audio_recorder.active_device_index} ({self.audio_recorder.sample_rate}Hz, Gemini Live active)")
         except Exception as e:
             log_event(f"Microphone error: {e}")
             if self.overlay.root:
@@ -347,7 +390,11 @@ class OwnVoiceApp:
                     "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "text": expanded_text,
                     "mode": self.active_context_mode,
-                    "latency": latency
+                    "latency": latency,
+                    "app": getattr(self, "active_process_name", "") or getattr(self, "active_context_label", "") or "desktop",
+                    "process": getattr(self, "active_process_name", ""),
+                    "window_title": getattr(self, "active_window_title", ""),
+                    "label": getattr(self, "active_context_label", "")
                 })
 
                 # Auto-save structured note if in note mode or multi-line document
@@ -402,6 +449,7 @@ class OwnVoiceApp:
 
     def cancel_dictation(self):
         log_event("Recording cancelled by user via ✕ button.")
+        self.ai_engine.cancel_live_session()
         self.audio_recorder.stop_recording()
         self.is_note_session = False
         if self.settings_ui and hasattr(self.settings_ui, "resume_vu_monitor"):

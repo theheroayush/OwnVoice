@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 export function ProviderRibbon() {
   return (
-    <section className="py-14 border-y border-white/[0.04] bg-[#07080b]/50">
+    <section id="providers" className="py-14 border-y border-white/[0.04] bg-[#07080b]/50">
       <div className="max-w-5xl mx-auto px-4 text-center space-y-5">
         <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500 font-semibold font-mono">
           WORKS WITH YOUR FAVOURITE AI PROVIDERS

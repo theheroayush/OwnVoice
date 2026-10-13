@@ -295,33 +295,6 @@ fun KeyboardView(
                                     }
                                 }
 
-                                // 2b. Remote Trackpad & Air Mouse Pill
-                                item {
-                                    val isTrackpad = state == KeyboardState.TRACKPAD
-                                    Surface(
-                                        color = if (isTrackpad) Color(0xFF2563EB) else keyBg,
-                                        shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, if (isTrackpad) Color(0xFF60A5FA) else keyBorder),
-                                        modifier = Modifier.clickable {
-                                            onStateChange(if (isTrackpad) KeyboardState.IDLE else KeyboardState.TRACKPAD)
-                                        }
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
-                                        ) {
-                                            Text(text = "🖱️", fontSize = 12.sp)
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Trackpad",
-                                                color = textWhite,
-                                                fontSize = 11.sp,
-                                                fontWeight = if (isTrackpad) FontWeight.Bold else FontWeight.Medium
-                                            )
-                                        }
-                                    }
-                                }
-
                                 // 2c. Real-Time "From PC" Clipboard Chip
                                 if (!pcClipboardText.isNullOrBlank()) {
                                     item {
@@ -578,6 +551,7 @@ fun KeyboardView(
                         onToggleBridge = onToggleBridge,
                         onToggleAutoVad = onToggleAutoVad,
                         onSnippetClick = onSnippetClick,
+                        onOpenTrackpad = { onStateChange(KeyboardState.TRACKPAD) },
                         onClose = { onStateChange(KeyboardState.IDLE) }
                     )
                 }
@@ -755,11 +729,9 @@ private fun GboardQwertyView(
             }
         }
 
-        // ROW 2: A - L (Centered with side spacing matching Gboard)
+        // ROW 2: A - L (Centered with 0.5f spacers matching Gboard QWERTY stagger)
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(keyHorizontalGap)
         ) {
             if (isSymbolsMode) {
@@ -776,6 +748,7 @@ private fun GboardQwertyView(
                     ) { onTypeChar(sym) }
                 }
             } else {
+                Spacer(modifier = Modifier.weight(0.5f))
                 lettersRow2.forEach { letter ->
                     val displayChar = if (isShifted) letter.uppercase() else letter
                     val secondary = LongPressSymbolMenu.getSecondarySymbol(letter)
@@ -800,38 +773,30 @@ private fun GboardQwertyView(
                         if (isShifted) isShifted = false
                     }
                 }
+                Spacer(modifier = Modifier.weight(0.5f))
             }
         }
 
-        // ROW 3: Shift, Z - M, Backspace (with Swipe-to-Delete)
+        // ROW 3: Shift (1.5f), Z - M (7 * 1f), Backspace (1.5f)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(keyHorizontalGap),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Shift Key
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (isShifted) actionEnterBg else accentKeyBg,
-                modifier = Modifier
-                    .weight(1.4f)
-                    .height(rowKeyHeight)
-                    .pointerInput(isShifted) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            down.consume()
-                            isShifted = !isShifted
-                            waitForUpOrCancellation()
-                        }
-                    }
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Text(text = "⇧", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // Letters or Symbols
             if (isSymbolsMode) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = accentKeyBg,
+                    modifier = Modifier
+                        .weight(1.0f)
+                        .height(rowKeyHeight)
+                        .clickable { isSymbolsMode = false }
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(text = "=\\<", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 symbolsRow3.forEach { sym ->
                     GboardKey(
                         char = sym,
@@ -844,7 +809,36 @@ private fun GboardQwertyView(
                         onPressed = { onKeyPressed(sym, it) }
                     ) { onTypeChar(sym) }
                 }
+
+                GboardBackspaceKey(
+                    accentKeyBg = accentKeyBg,
+                    height = rowKeyHeight,
+                    modifier = Modifier.weight(1.0f),
+                    onBackspaceClick = onBackspaceClick,
+                    onBackspaceScrub = onBackspaceScrub,
+                    onBackspaceScrubCommit = onBackspaceScrubCommit
+                )
             } else {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isShifted) actionEnterBg else accentKeyBg,
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .height(rowKeyHeight)
+                        .pointerInput(isShifted) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                down.consume()
+                                isShifted = !isShifted
+                                waitForUpOrCancellation()
+                            }
+                        }
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(text = "⇧", color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 lettersRow3.forEach { letter ->
                     val displayChar = if (isShifted) letter.uppercase() else letter
                     val secondary = LongPressSymbolMenu.getSecondarySymbol(letter)
@@ -869,31 +863,29 @@ private fun GboardQwertyView(
                         if (isShifted) isShifted = false
                     }
                 }
-            }
 
-            // Backspace Key with Swipe-to-Delete Scrubbing
-            GboardBackspaceKey(
-                accentKeyBg = accentKeyBg,
-                height = rowKeyHeight,
-                modifier = Modifier.weight(1.4f),
-                onBackspaceClick = onBackspaceClick,
-                onBackspaceScrub = onBackspaceScrub,
-                onBackspaceScrubCommit = onBackspaceScrubCommit
-            )
+                GboardBackspaceKey(
+                    accentKeyBg = accentKeyBg,
+                    height = rowKeyHeight,
+                    modifier = Modifier.weight(1.5f),
+                    onBackspaceClick = onBackspaceClick,
+                    onBackspaceScrub = onBackspaceScrub,
+                    onBackspaceScrubCommit = onBackspaceScrubCommit
+                )
+            }
         }
 
-        // ROW 4: ?123, Comma, Emoji, Space Bar (with Glide), Period (or @/.com), Action/Enter
+        // ROW 4: ?123 (1.4f), Comma/@ (1.0f), Space Bar (4.8f), Period (1.0f), Action/Enter (1.8f)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(keyHorizontalGap),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // ?123 / ABC Toggle Key
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = accentKeyBg,
                 modifier = Modifier
-                    .weight(1.3f)
+                    .weight(1.4f)
                     .height(rowKeyHeight)
                     .pointerInput(isSymbolsMode) {
                         awaitEachGesture {
@@ -914,54 +906,6 @@ private fun GboardQwertyView(
                 }
             }
 
-            // Comma Key
-            var isCommaPressed by remember { mutableStateOf(false) }
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (isCommaPressed) accentKeyBg.copy(alpha = 0.72f) else accentKeyBg,
-                modifier = Modifier
-                    .weight(0.9f)
-                    .height(rowKeyHeight)
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            down.consume()
-                            isCommaPressed = true
-                            onTypeChar(",")
-                            waitForUpOrCancellation()
-                            isCommaPressed = false
-                        }
-                    }
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Text(text = ",", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // Emoji Picker Switcher
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = keyBg,
-                modifier = Modifier
-                    .weight(0.9f)
-                    .height(rowKeyHeight)
-                    .clickable { onOpenEmoji() }
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Text(text = "☺", color = textWhite, fontSize = 16.sp)
-                }
-            }
-
-            // Space Bar with Trackpad Cursor Glide
-            GboardSpacebarKey(
-                keyBg = keyBg,
-                height = rowKeyHeight,
-                modifier = Modifier.weight(if (layoutMode == KeyboardLayoutMode.EMAIL) 3.2f else 4.2f),
-                onSpaceClick = onSpaceClick,
-                onSpacebarGlide = onSpacebarGlide
-            )
-
-            // Email Layout Extra Key: "@" or ".com"
             if (layoutMode == KeyboardLayoutMode.EMAIL) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
@@ -975,39 +919,47 @@ private fun GboardQwertyView(
                         Text(text = "@", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
-            }
-
-            // Period Key
-            var isPeriodPressed by remember { mutableStateOf(false) }
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = if (isPeriodPressed) accentKeyBg.copy(alpha = 0.72f) else accentKeyBg,
-                modifier = Modifier
-                    .weight(0.9f)
-                    .height(rowKeyHeight)
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            down.consume()
-                            isPeriodPressed = true
-                            onTypeChar(".")
-                            waitForUpOrCancellation()
-                            isPeriodPressed = false
-                        }
-                    }
-            ) {
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Text(text = ".", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            } else {
+                GboardKey(
+                    char = ",",
+                    subscript = "☺",
+                    keyBg = accentKeyBg,
+                    textColor = Color.White,
+                    subscriptColor = subscriptGray,
+                    height = rowKeyHeight,
+                    modifier = Modifier.weight(1.0f),
+                    onLongPress = { onOpenEmoji() }
+                ) {
+                    onTypeChar(",")
                 }
             }
 
-            // Action / Enter Key with Adaptive Icon
+            GboardSpacebarKey(
+                keyBg = keyBg,
+                height = rowKeyHeight,
+                modifier = Modifier.weight(4.8f),
+                onSpaceClick = onSpaceClick,
+                onSpacebarGlide = onSpacebarGlide
+            )
+
+            GboardKey(
+                char = ".",
+                subscript = null,
+                keyBg = accentKeyBg,
+                textColor = Color.White,
+                subscriptColor = subscriptGray,
+                height = rowKeyHeight,
+                modifier = Modifier.weight(1.0f)
+            ) {
+                onTypeChar(".")
+            }
+
             var isEnterPressed by remember { mutableStateOf(false) }
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = if (isEnterPressed) actionEnterBg.copy(alpha = 0.75f) else actionEnterBg,
                 modifier = Modifier
-                    .weight(1.35f)
+                    .weight(1.8f)
                     .height(rowKeyHeight)
                     .pointerInput(Unit) {
                         awaitEachGesture {
@@ -1049,7 +1001,7 @@ private fun GboardSpacebarKey(
     var isPressed by remember { mutableStateOf(false) }
     val density = LocalDensity.current
 
-    val deadzonePx = with(density) { 12.dp.toPx() }
+    val deadzonePx = with(density) { 24.dp.toPx() }
     val stepPx = with(density) { 10.dp.toPx() }
 
     Surface(
@@ -1139,7 +1091,7 @@ private fun GboardBackspaceKey(
     var scrubWordCount by remember { mutableStateOf(0) }
     val density = LocalDensity.current
 
-    val scrubThresholdPx = with(density) { 15.dp.toPx() }
+    val scrubThresholdPx = with(density) { 36.dp.toPx() }
     val wordStepPx = with(density) { 26.dp.toPx() }
 
     Surface(
@@ -1244,32 +1196,92 @@ private fun GboardKey(
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val effectiveBg = if (isPressed) keyBg.copy(alpha = 0.72f) else keyBg
+    val density = LocalDensity.current
+    val touchSlopPx = with(density) { 20.dp.toPx() }
+    val releaseMarginPx = with(density) { 8.dp.toPx() }
 
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = effectiveBg,
         modifier = modifier
             .height(height)
-            .pointerInput(char, onClick) {
+            .pointerInput(char, onClick, onLongPress) {
+                val keyWidthPx = size.width.toFloat()
+                val keyHeightPx = size.height.toFloat()
+
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
                     isPressed = true
                     onPressed?.invoke(true)
 
-                    // Long press timeout: 260ms
-                    val upOrCancel = withTimeoutOrNull(260L) {
-                        waitForUpOrCancellation()
+                    val startX = down.position.x
+                    val startY = down.position.y
+                    var isLongPressed = false
+                    var isLongPressCancelled = false
+                    val longPressTimeout = 450L
+
+                    val startTime = System.currentTimeMillis()
+                    while (true) {
+                        val elapsed = System.currentTimeMillis() - startTime
+                        val remaining = longPressTimeout - elapsed
+
+                        if (remaining <= 0L && !isLongPressed && !isLongPressCancelled) {
+                            if (onLongPress != null) {
+                                isLongPressed = true
+                                onLongPress.invoke()
+                            }
+                        }
+
+                        val waitTime = if (!isLongPressed && !isLongPressCancelled && remaining > 0L) remaining else 4000L
+                        val event = withTimeoutOrNull(waitTime) {
+                            awaitPointerEvent()
+                        }
+
+                        if (event == null) {
+                            // Timeout expired while holding still!
+                            if (!isLongPressed && !isLongPressCancelled && onLongPress != null) {
+                                isLongPressed = true
+                                onLongPress.invoke()
+                            }
+                            continue
+                        }
+
+                        // Strictly match the pointer ID that initiated this gesture.
+                        // NEVER fall back to event.changes.firstOrNull(), which erroneously evaluates
+                        // displacements against the opposite thumb during rapid two-thumb typing.
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                        if (change == null) {
+                            // Event belongs to another pointer; ignore and continue tracking this key's pointer.
+                            continue
+                        }
+
+                        if (!change.pressed) {
+                            // Pointer lifted up!
+                            change.consume()
+                            val releaseX = change.position.x
+                            val releaseY = change.position.y
+                            val w = if (keyWidthPx > 0f) keyWidthPx else with(density) { 40.dp.toPx() }
+                            val h = if (keyHeightPx > 0f) keyHeightPx else with(density) { height.toPx() }
+                            val isInsideBounds = releaseX >= -releaseMarginPx &&
+                                    releaseX <= (w + releaseMarginPx) &&
+                                    releaseY >= -releaseMarginPx &&
+                                    releaseY <= (h + releaseMarginPx)
+
+                            if (!isLongPressed && isInsideBounds) {
+                                onClick()
+                            }
+                            break
+                        }
+
+                        // Check displacement: if moved beyond calibrated touch slop, cancel long press
+                        val dx = change.position.x - startX
+                        val dy = change.position.y - startY
+                        if (dx * dx + dy * dy > touchSlopPx * touchSlopPx) {
+                            isLongPressCancelled = true
+                        }
                     }
 
-                    if (upOrCancel == null) {
-                        // Long press fired!
-                        onLongPress?.invoke() ?: onClick()
-                        waitForUpOrCancellation()
-                    } else {
-                        // Regular tap
-                        onClick()
-                    }
                     isPressed = false
                     onPressed?.invoke(false)
                 }
@@ -1439,6 +1451,7 @@ private fun GboardToolsDrawerView(
     onToggleBridge: () -> Unit,
     onToggleAutoVad: () -> Unit,
     onSnippetClick: (String) -> Unit,
+    onOpenTrackpad: () -> Unit,
     onClose: () -> Unit
 ) {
     Column(
@@ -1498,6 +1511,24 @@ private fun GboardToolsDrawerView(
                 Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.Center) {
                     Text(text = if (isAutoVadActive) "🎙️ Auto: ON" else "🎙️ Auto VAD", color = textWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Text(text = "1.2s silence commit", color = subscriptGray, fontSize = 10.sp)
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = keyBg,
+                border = BorderStroke(1.dp, keyBorder),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(55.dp)
+                    .clickable {
+                        onClose()
+                        onOpenTrackpad()
+                    }
+            ) {
+                Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.Center) {
+                    Text(text = "🖱️ Trackpad", color = textWhite, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Wi-Fi Air Mouse", color = subscriptGray, fontSize = 10.sp)
                 }
             }
         }

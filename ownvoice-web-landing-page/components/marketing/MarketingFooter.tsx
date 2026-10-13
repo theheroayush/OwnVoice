@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -177,7 +177,7 @@ export function MarketingFooter() {
               </h4>
               <ul className="space-y-2.5 text-xs sm:text-sm">
                 <li>
-                  <Link href="/docs/user-guide" className="hover:text-white transition-colors">
+                  <Link href="/docs/getting-started" className="hover:text-white transition-colors">
                     User Guide
                   </Link>
                 </li>
@@ -211,12 +211,12 @@ export function MarketingFooter() {
               </h4>
               <ul className="space-y-2.5 text-xs sm:text-sm">
                 <li>
-                  <Link href="/about" className="hover:text-white transition-colors">
+                  <Link href="/contact" className="hover:text-white transition-colors">
                     About Us
                   </Link>
                 </li>
                 <li>
-                  <Link href="/security" className="hover:text-white transition-colors">
+                  <Link href="/docs/privacy" className="hover:text-white transition-colors">
                     Privacy Policy
                   </Link>
                 </li>
@@ -331,7 +331,7 @@ export function MarketingFooter() {
 
           {/* Legal Links with Divider Pipes */}
           <div className="flex items-center gap-3 text-xs text-zinc-400 flex-wrap justify-center">
-            <Link href="/security" className="hover:text-white transition-colors">
+            <Link href="/docs/privacy" className="hover:text-white transition-colors">
               Privacy
             </Link>
             <span className="text-zinc-600">|</span>
@@ -339,13 +339,13 @@ export function MarketingFooter() {
               Terms
             </Link>
             <span className="text-zinc-600">|</span>
-            <Link href="/security#guarantee" className="hover:text-white transition-colors">
+            <Link href="/refund-policy" className="hover:text-white transition-colors">
               Refund Policy
             </Link>
             <span className="text-zinc-600">|</span>
-            <a href="mailto:support@ownvoice.ai" className="hover:text-white transition-colors">
+            <Link href="/contact" className="hover:text-white transition-colors">
               Contact
-            </a>
+            </Link>
           </div>
 
           {/* Secure Payments Badges */}

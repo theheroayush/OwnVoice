@@ -11,7 +11,6 @@ import {
   Download,
   ArrowRight,
   Monitor,
-  Laptop,
   Smartphone,
   Loader2,
   AlertCircle,
@@ -178,36 +177,31 @@ export default function LicenseLookupPage() {
                 <div className="text-[11px] text-zinc-400">
                   Fresh 24-hour encrypted download links:
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <a
                     href={`/api/download/secure?token=${result.token}&os=windows`}
-                    className="p-3 rounded-xl bg-zinc-900 hover:bg-blue-950/40 border border-white/10 hover:border-blue-500/40 text-left transition-all group flex items-center justify-between"
+                    className="p-3.5 rounded-xl bg-zinc-900 hover:bg-blue-950/40 border border-white/10 hover:border-blue-500/40 text-left transition-all group flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <Monitor className="w-4 h-4 text-blue-400" />
-                      <span className="text-xs font-semibold text-white">Windows</span>
-                    </div>
-                    <Download className="w-3.5 h-3.5 text-zinc-400 group-hover:text-blue-400" />
-                  </a>
-
-                  <a
-                    href={`/api/download/secure?token=${result.token}&os=mac`}
-                    className="p-3 rounded-xl bg-zinc-900 hover:bg-blue-950/40 border border-white/10 hover:border-blue-500/40 text-left transition-all group flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Laptop className="w-4 h-4 text-indigo-400" />
-                      <span className="text-xs font-semibold text-white">macOS</span>
+                      <div>
+                        <span className="text-xs font-semibold text-white block">Windows Desktop</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">v2.0.0 • .zip package</span>
+                      </div>
                     </div>
                     <Download className="w-3.5 h-3.5 text-zinc-400 group-hover:text-blue-400" />
                   </a>
 
                   <a
                     href={`/api/download/secure?token=${result.token}&os=android`}
-                    className="p-3 rounded-xl bg-zinc-900 hover:bg-blue-950/40 border border-white/10 hover:border-blue-500/40 text-left transition-all group flex items-center justify-between"
+                    className="p-3.5 rounded-xl bg-zinc-900 hover:bg-blue-950/40 border border-white/10 hover:border-blue-500/40 text-left transition-all group flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <Smartphone className="w-4 h-4 text-emerald-400" />
-                      <span className="text-xs font-semibold text-white">Android</span>
+                      <div>
+                        <span className="text-xs font-semibold text-white block">Android Keyboard</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">v3.0.0 • APK package</span>
+                      </div>
                     </div>
                     <Download className="w-3.5 h-3.5 text-zinc-400 group-hover:text-emerald-400" />
                   </a>

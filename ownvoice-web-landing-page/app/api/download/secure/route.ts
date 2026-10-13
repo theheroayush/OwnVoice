@@ -61,7 +61,10 @@ export async function GET(req: NextRequest) {
     // 3. Resolve the secure binary file on disk (never in public/ directory)
     const possibleDirs = [
       path.join(process.cwd(), "private_storage", "installers"),
+      path.join(process.cwd(), "ownvoice-web-landing-page", "private_storage", "installers"),
+      path.join(process.cwd(), "releases"),
       path.join(process.cwd(), "..", "releases"),
+      path.join(process.cwd(), "dist"),
       path.join(process.cwd(), "..", "dist"),
     ];
 

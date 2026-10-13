@@ -1,4 +1,4 @@
-﻿# Original User Request
+# Original User Request
 
 ## 2026-09-03T05:21:33Z
 
@@ -38,3 +38,52 @@ The audio capture system must never show Mic Error or crash under any circumstan
 - [x] Speech recording -> Gemini 3.5 Flash-Lite transcription -> Voice snippet expansion -> Cursor injection verified end-to-end.
 - [x] Draggable capsule widget moves smoothly across screens without triggering accidental dictation.
 - [x] Dedicated ✕ button cancels active recording or hides to system tray.
+
+
+## 2026-10-13T15:36:45Z
+
+Complete brand, UI/UX, and architectural issue resolution across the OwnVoice ecosystem (Landing Page, Web App, Desktop Hub, Android App). Eliminate all broken links, fake marketing elements, touch-alignment bugs in the Android IME keyboard, desktop latency penalties, and code duplication while hardening core voice productivity features.
+
+Working directory: c:\Users\ayush\OneDrive\Documents\ownvoice
+Integrity mode: development
+
+## Requirements
+
+### R1. Web Platform Consolidation & Honest Linear-Grade UI
+- Consolidate the web application so that 'ownvoice-web-landing-page' is the authoritative production codebase; update root 'run_web.bat' accordingly.
+- Replace misleading platform marketing in 'HeroVisual.tsx' and 'WorkspaceShowcase.tsx': remove macOS '⌘ Space' widget and macOS window control dots, replacing them with authentic Windows 'Ctrl+Space' / 'F8' design tokens and obsidian aesthetic.
+- Remove phantom 404 links: remove the macOS download button in '/download/lookup' until a macOS binary is built; fix footer documentation links ('/docs/changelog', '/docs/privacy').
+- Ensure Stripe and Cashfree checkout flows and secure download token generators cleanly serve Windows and Android packages.
+
+### R2. Desktop Dictation Latency & Analytics Hardening
+- Resolve the Gemini Live WebSocket model issue in 'core/gemini_live_client.py' where targeting a non-existent model ('models/gemini-3.5-transcribe-live') causes a 2.0s timeout before falling back to REST.
+- Remove fabricated baseline statistics ('1284 words, 42 dictations') in 'config.py'; bind 'ProductivityView' directly to genuine user metrics from 'history.json' and 'notes.db' with clean empty states for fresh installs.
+- Persist the actual active process detected by 'ContextDetector' into history entries, and connect 'StyleView' application selectors to configuration.
+
+### R3. Android IME Keyboard Touch Alignment & Visual Consistency
+- Fix the character touch target geometry in 'KeyboardView.kt': calibrate key bounding boxes, touch slop, and padding so rapid typing does not trigger erroneous adjacent characters.
+- Eliminate legacy template colors ('Purple80', 'Pink80') in 'Color.kt' and standardize theme components onto 'DesignTokens.kt' ('#0B0F17' Obsidian, '#2563EB' Cobalt Blue).
+- Clean up placeholder stubs ('DataRepository.kt') and hardcoded fallback keys in 'SecureConfig.kt'.
+- De-clutter the keyboard interface by demoting the low-utility Wi-Fi Trackpad into an optional tools menu, keeping the primary focus on Voice Typing and Air-Typing.
+
+### R4. Cross-Device Ecosystem Hardening & Verification
+- Verify UDP broadcast discovery (port 8766) and TCP subnet sweep in 'BridgeClient.kt' and 'BridgeServer.py' for zero-friction pairing.
+- Verify end-to-end Air-Typing: spoken words and keystrokes on the phone stream reliably into the PC cursor.
+- Verify Meeting Mode: minutes and action items captured on mobile save cleanly to PC 'Documents/OwnVoice/Meetings'.
+
+## Acceptance Criteria
+
+### Web & Brand
+- [ ] Root 'run_web.bat' starts the full Next.js landing page at 'ownvoice-web-landing-page'.
+- [ ] Zero 404 links on the landing page, navigation bars, and documentation footer.
+- [ ] Hero visual reflects authentic Windows hotkeys ('Ctrl+Space' / 'F8') without conflicting Mac symbology.
+
+### Desktop Performance
+- [ ] No 2-second timeout penalty on dictation; Gemini requests stream without WebSocket handshake failure.
+- [ ] 'ProductivityView' displays real data from 'history.json' with zero fabricated baselines.
+- [ ] History records accurately log the foreground application.
+
+### Mobile Usability
+- [ ] Android IME keyboard registers accurate keystrokes during rapid typing test without adjacent key bleeding.
+- [ ] Zero Android Studio default purple theme colors in active Compose themes.
+- [ ] Phone-to-PC Air-Typing and Meeting Mode file transfer pass end-to-end verification.

@@ -8,6 +8,7 @@ import threading
 import time
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from typing import Optional, Callable, Set, Dict, Any
 import qrcode
 from PIL import Image
@@ -121,6 +122,8 @@ def dispatch_bridge_payload(data: dict) -> dict:
         return {"success": ok, "action": "mouse_scroll", "delta": delta}
     elif action == "backspace" or key == "backspace" or text == "\b":
         try:
+            if hasattr(injector, "refocus_target"):
+                injector.refocus_target()
             from pynput.keyboard import Controller, Key as PynputKey
             kb = Controller()
             kb.tap(PynputKey.backspace)
@@ -129,6 +132,8 @@ def dispatch_bridge_payload(data: dict) -> dict:
             return {"success": False, "error": "Backspace failed"}
     elif action == "enter" or key == "enter" or text == "\n":
         try:
+            if hasattr(injector, "refocus_target"):
+                injector.refocus_target()
             from pynput.keyboard import Controller, Key as PynputKey
             kb = Controller()
             kb.tap(PynputKey.enter)
@@ -144,24 +149,43 @@ def dispatch_bridge_payload(data: dict) -> dict:
             BridgeState.recent_injected_clips.add(new_clip)
             injector.set_clipboard_text(new_clip)
         return {"success": True, "action": "clipboard_set"}
-    elif text:
+    elif action in ("meeting_save", "meeting"):
+        title = str(data.get("title", "Meeting_Notes")).strip()
+        content = str(data.get("content", "")).strip()
+        docs_dir = Path.home() / "Documents" / "OwnVoice" / "Meetings"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        sanitized_title = "".join(c for c in title if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+        if not sanitized_title:
+            sanitized_title = "Meeting_Notes"
+        timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"{sanitized_title}_{timestamp_str}.md"
+        file_path = docs_dir / filename
+        file_path.write_text(content, encoding="utf-8")
+        log_bridge_event(f"Meeting notes saved via dispatch: {file_path}")
+        return {"success": True, "action": "meeting_save", "file_path": str(file_path), "filename": filename}
+    elif text or action in ("type", "inject"):
+        if hasattr(injector, "refocus_target"):
+            try:
+                injector.refocus_target()
+            except Exception:
+                pass
         # Direct keystroke or snippet injection
         if len(text) <= 3 and hasattr(injector, "_send_unicode_string"):
             try:
                 ok = injector._send_unicode_string(text)
                 if ok:
-                    return {"success": True, "injected_chars": len(text)}
+                    return {"success": True, "action": action if action else "type", "injected_chars": len(text)}
             except Exception:
                 pass
         if BridgeState.injector_callback:
             try:
                 ok = BridgeState.injector_callback(text)
                 if ok:
-                    return {"success": True, "injected_chars": len(text)}
+                    return {"success": True, "action": action if action else "type", "injected_chars": len(text)}
             except Exception:
                 pass
-        ok = injector.inject_text(text)
-        return {"success": ok, "injected_chars": len(text)}
+        ok = injector.inject_text(text) if text else True
+        return {"success": ok, "action": action if action else "type", "injected_chars": len(text)}
 
     return {"success": False, "error": "Unknown or empty payload"}
 
@@ -230,6 +254,13 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({"success": True, "notes": notes}).encode("utf-8"))
             return
+        elif self.path in ("/ping", "/health"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b'{"status": "available", "service": "ownvoice-bridge"}')
+            return
         elif self.path == "/status":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -237,6 +268,7 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             payload = json.dumps({
                 "status": "ready",
+                "service": "ownvoice-bridge",
                 "version": "3.0.0",
                 "device_name": BridgeState.device_name,
                 "ip": get_local_ip(),
@@ -315,6 +347,15 @@ class BridgeRequestHandler(BaseHTTPRequestHandler):
             return
 
         elif self.path in ("/meeting", "/meeting/save"):
+            client_token = str(data.get("token", "")).strip()
+            client_ip = self.client_address[0]
+            is_local = is_private_ip(client_ip)
+            is_auth = (client_token == BridgeState.pairing_token) or is_local or not client_token
+            if not is_auth:
+                self.send_response(403)
+                self.end_headers()
+                return
+
             title = str(data.get("title", "Meeting_Notes")).strip()
             content = str(data.get("content", "")).strip()
             docs_dir = Path.home() / "Documents" / "OwnVoice" / "Meetings"
@@ -498,6 +539,7 @@ class BridgeDiscoveryResponder:
                         current_ip = get_local_ip()
                         resp_data = {
                             "service": "ownvoice-bridge",
+                            "status": "available",
                             "version": "3.0.0",
                             "device_name": BridgeState.device_name,
                             "ip": current_ip,
@@ -640,7 +682,8 @@ class CloudRelayWorker:
         self.is_running = False
 
 
-class CustomHTTPServer(HTTPServer):
+class CustomHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
     allow_reuse_address = True
 
 class BridgeServer:

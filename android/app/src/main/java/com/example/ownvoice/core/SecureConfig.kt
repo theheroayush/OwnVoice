@@ -38,7 +38,6 @@ class SecureConfig(context: Context) {
         private const val KEY_GIST_ID = "gist_id"
         private const val KEY_HAPTIC_FEEDBACK = "haptic_feedback_enabled"
         private const val KEY_USE_FOR_PC = "use_for_pc_enabled"
-        const val DEFAULT_API_KEY = "AQ.Ab8RN6JVp6KVzuryq8BuUZLBYBuUJCNqwECacgdSMUegi5EblA"
         private const val KEY_HISTORY_JSON = "history_json"
 
         private const val KEY_LANGUAGE = "app_language"
@@ -60,7 +59,7 @@ class SecureConfig(context: Context) {
     }
 
     val isDefaultOrBlankApiKey: Boolean
-        get() = apiKey.isBlank() || apiKey == DEFAULT_API_KEY
+        get() = apiKey.isBlank()
 
     val sharedPreferences: SharedPreferences get() = prefs
 
@@ -177,7 +176,7 @@ class SecureConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_GIST_ID, value.trim()).apply()
 
     var apiKey: String
-        get() = prefs.getString(KEY_API_KEY, "")?.trim()?.ifBlank { DEFAULT_API_KEY } ?: DEFAULT_API_KEY
+        get() = prefs.getString(KEY_API_KEY, "")?.trim() ?: ""
         set(value) = prefs.edit().putString(KEY_API_KEY, value.trim()).apply()
 
     var dictationMode: String
@@ -360,52 +359,6 @@ class SecureConfig(context: Context) {
     }
 
     private fun defaultHistory(): List<HistoryItem> {
-        val now = System.currentTimeMillis()
-        val hour = 60 * 60 * 1000L
-        val day = 24 * hour
-        return listOf(
-            HistoryItem(
-                id = "h1",
-                text = "Send the proposal to Rahul tomorrow morning before 10 AM.",
-                timestamp = now - 28 * 60 * 1000L, // 9:12 AM today
-                target = "Sent to MacBook Pro",
-                tags = listOf("Work")
-            ),
-            HistoryItem(
-                id = "h2",
-                text = "What are the key points from today's client call?",
-                timestamp = now - 55 * 60 * 1000L, // 8:45 AM today
-                target = "Copied to clipboard",
-                tags = listOf("Work", "Meeting")
-            ),
-            HistoryItem(
-                id = "h3",
-                text = "Remind me to book train tickets to Varanasi next week.",
-                timestamp = now - 130 * 60 * 1000L, // 7:28 AM today
-                target = "Sent to MacBook Pro",
-                tags = listOf("Personal")
-            ),
-            HistoryItem(
-                id = "h4",
-                text = "Create a content plan for next week with 5 LinkedIn post ideas.",
-                timestamp = now - 1 * day - 3 * hour,
-                target = "Copied to clipboard",
-                tags = listOf("Work", "Content")
-            ),
-            HistoryItem(
-                id = "h5",
-                text = "List top 5 business ideas in the AI space for India.",
-                timestamp = now - 1 * day - 8 * hour,
-                target = "Sent to MacBook Pro",
-                tags = listOf("Research", "Ideas")
-            ),
-            HistoryItem(
-                id = "h6",
-                text = "Summarize this article for me in simple points.",
-                timestamp = now - 4 * day,
-                target = "Copied to clipboard",
-                tags = listOf("Reading")
-            )
-        )
+        return emptyList()
     }
 }

@@ -47,15 +47,21 @@ export function HeroVisual() {
       {/* Main Desktop App Window Mockup */}
       <div className="relative z-10 rounded-2xl border border-white/[0.12] bg-[#0c0f17]/95 shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_30px_rgba(59,130,246,0.15)] backdrop-blur-2xl overflow-hidden">
         {/* Window Titlebar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08] bg-[#0a0d14]/80">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.08] bg-[#090c13]/90 select-none">
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-            <span className="text-xs font-semibold text-zinc-300 ml-2">Own Voice</span>
+            <div className="w-3.5 h-3.5 rounded bg-blue-600/30 border border-blue-500/40 flex items-center justify-center">
+              <Mic className="w-2.5 h-2.5 text-blue-400" />
+            </div>
+            <span className="text-xs font-semibold text-zinc-300">Own Voice</span>
+            <span className="text-[10px] font-mono text-zinc-500 ml-1">v2.0.0 • Windows</span>
+            <span className="ml-2 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] font-medium tracking-wide">
+              Ready
+            </span>
           </div>
-          <div className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-medium tracking-wide">
-            Ready
+          <div className="flex items-center gap-3 text-zinc-500 text-xs">
+            <span className="hover:text-zinc-300 cursor-pointer font-mono" title="Minimize">─</span>
+            <span className="hover:text-zinc-300 cursor-pointer font-mono text-[10px]" title="Maximize">□</span>
+            <span className="hover:text-rose-400 cursor-pointer font-mono" title="Close">✕</span>
           </div>
         </div>
 
@@ -151,13 +157,15 @@ export function HeroVisual() {
       </div>
 
       {/* Floating 3D Frosted Glass Key Widget */}
-      <div className="absolute -bottom-5 -right-3 sm:-bottom-7 sm:-right-5 z-30 w-40 sm:w-44 p-3.5 rounded-2xl bg-gradient-to-b from-zinc-800/95 to-zinc-900/95 backdrop-blur-2xl border border-white/20 shadow-[0_20px_40px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.25)] text-center transform hover:scale-105 transition-transform duration-300">
-        <div className="flex items-center justify-center gap-1.5 mb-1">
-          <span className="text-2xl sm:text-3xl font-black text-white tracking-wider">⌘</span>
-          <span className="text-base sm:text-lg font-bold text-zinc-200">Space</span>
+      <div className="absolute -bottom-5 -right-3 sm:-bottom-7 sm:-right-5 z-30 w-44 p-3.5 rounded-2xl bg-gradient-to-b from-[#121624]/95 to-[#0b0e18]/95 backdrop-blur-2xl border border-blue-500/30 shadow-[0_20px_40px_rgba(0,0,0,0.8),inset_0_1px_0_rgba(255,255,255,0.15)] text-center transform hover:scale-105 transition-transform duration-300">
+        <div className="flex items-center justify-center gap-1.5 mb-1.5">
+          <kbd className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-xs font-mono font-bold text-white shadow-inner">Ctrl</kbd>
+          <span className="text-zinc-500 text-xs font-bold">+</span>
+          <kbd className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-xs font-mono font-bold text-white shadow-inner">Space</kbd>
         </div>
-        <p className="text-[10px] sm:text-[11px] text-zinc-400 leading-tight font-medium">
-          Press <span className="text-white font-semibold">⌘ Space</span><br />To start speaking
+        <p className="text-[10px] text-zinc-400 leading-tight font-medium">
+          Press <span className="text-blue-300 font-semibold font-mono">Ctrl+Space</span> or <span className="text-blue-300 font-semibold font-mono">F8</span><br />
+          Instant cursor dictation
         </p>
       </div>
     </div>

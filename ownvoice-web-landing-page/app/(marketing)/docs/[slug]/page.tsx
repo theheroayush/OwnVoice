@@ -201,6 +201,56 @@ We are here to help you get the most out of your Own Voice license.
 - **Operating Jurisdiction**: New Delhi, India
     `,
   },
+  "changelog": {
+    title: "Changelog & Release Notes",
+    category: "Releases",
+    updatedAt: "October 2026",
+    content: `
+### Version 2.0.0 (Windows Desktop Hub)
+- **Low-Latency Streaming**: Upgraded transcription engine with Gemini 2.0 Flash for sub-second live dictation.
+- **Obsidian Dark Theme**: Unified linear-grade dark obsidian styling with native Windows titlebar controls.
+- **Win32 Context Detector**: Automatic foreground application sensing and per-app tone configuration.
+- **Global Hotkeys**: Native \`Ctrl+Space\` and \`F8\` direct cursor injection across any desktop app.
+- **Meeting Notes Hub**: Direct local saving of meeting notes and action items to \`Documents/OwnVoice/Meetings\`.
+
+### Version 3.0.0 (Android Keyboard & Companion)
+- **Calibrated Touch Geometry**: Calibrated key bounding boxes and touch slop in IME keyboard for error-free rapid typing.
+- **Air-Typing Streaming**: Stream spoken words and phone keystrokes directly into PC cursor over local Wi-Fi.
+- **Obsidian Linear Design Tokens**: Purged default purple/pink Android styles for refined #0B0F17 obsidian aesthetic.
+- **Zero-Friction Bridge**: UDP broadcast discovery on port 8766 and fast TCP pairing on port 8765.
+    `,
+  },
+  "user-guide": {
+    title: "User Guide & Complete Walkthrough",
+    category: "Guides",
+    updatedAt: "October 2026",
+    content: `
+### Complete User Guide
+Own Voice provides lightning-fast voice typing and AI text generation across Windows and Android.
+
+#### 1. Setup & Installation
+- Install Own Voice Desktop on Windows and connect your personal AI provider API key in Settings.
+- Press \`Ctrl+Space\` or \`F8\` anywhere in Windows to begin instant voice dictation.
+
+#### 2. Android Companion & Air-Typing
+- Install the Own Voice Android keyboard.
+- Pair phone with your PC via local Wi-Fi to use Air-Typing and dictate directly into your PC from your phone.
+
+#### 3. Meeting Mode
+- Use Meeting Mode to capture live conversations, generate structured minutes, and automatically save to your PC.
+    `,
+  },
+  "blog": {
+    title: "Own Voice Engineering & Product Blog",
+    category: "Blog",
+    updatedAt: "October 2026",
+    content: `
+### Voice-First Productivity: Why Local & BYOK Win
+In modern knowledge work, thinking out loud is 3x faster than typing. Traditional SaaS voice tools charge $20-$30/month subscriptions while proxying requests with marked-up token costs.
+
+Own Voice flips the model: purchase once, own your software forever, and bring your own wholesale AI provider keys (OpenAI, Gemini, Groq, Anthropic).
+    `,
+  },
 };
 
 export default async function DocPage({

@@ -1,11 +1,12 @@
 import base64
 import re
 import time
-from typing import Tuple
+from typing import Tuple, Optional
 
 import requests
 from requests.adapters import HTTPAdapter
 from core.offline_engine import OfflineWhisperEngine
+from core.gemini_live_client import GeminiLiveClient
 
 DICTATION_PROMPTS = {
     "smart_flow": (
@@ -101,39 +102,19 @@ class AIEngine:
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
         self.offline_engine = OfflineWhisperEngine()
+        self.live_client: Optional[GeminiLiveClient] = None
+        self.live_client_key: str = ""
 
-    @staticmethod
-    def _clean_transcript(raw_text: str) -> str:
-        """Strips markdown fences, wrapping quotes, timestamps, and acoustic silence artifacts."""
-        if not raw_text:
-            return ""
-        text = raw_text.strip()
-        # Filter markdown code fences if wrapped
-        if text.startswith("```") and text.endswith("```"):
-            lines = text.splitlines()
-            if len(lines) >= 2:
-                text = "\n".join(lines[1:-1]).strip()
-        # Filter wrapping quotes
-        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
-            text = text[1:-1].strip()
-        # Filter timestamp hallucinations e.g. "00:00", "0:00", "00:00 - 00:01"
-        if re.match(r"^(\d{1,2}:\d{2})(\s*-\s*\d{1,2}:\d{2})?\.?$", text):
-            return ""
-        # Filter silence/noise marker strings
-        if text.lower() in SILENCE_ARTIFACTS:
-            return ""
-        return text
-
-    def transcribe_audio(self, audio_wav_bytes: bytes, mode: str = None, selection_context: str = None) -> Tuple[str, float]:
-        start_time = time.time()
-
-        if not audio_wav_bytes or len(audio_wav_bytes) < 1000:
-            return "", 0.0
-
+    def get_live_client(self) -> Optional[GeminiLiveClient]:
         api_key = self.config.get("google_api_key", "").strip()
         if not api_key:
-            raise ValueError("Google AI Studio API Key is missing! Please configure it in Settings.")
+            return None
+        if self.live_client is None or self.live_client_key != api_key:
+            self.live_client = GeminiLiveClient(api_key=api_key)
+            self.live_client_key = api_key
+        return self.live_client
 
+    def build_system_instruction(self, mode: str = None, selection_context: str = None) -> str:
         if not mode:
             mode = self.config.get("dictation_mode", "smart_flow")
 
@@ -165,6 +146,75 @@ class AIEngine:
         custom_instructions = self.config.get("custom_instructions", "").strip()
         if custom_instructions:
             system_instruction += f"\n\nUSER CUSTOM INSTRUCTIONS:\n{custom_instructions}"
+
+        return system_instruction
+
+    def start_live_session(self, mode: str = None, selection_context: str = None) -> bool:
+        """Starts real-time live streaming session on recording start."""
+        try:
+            client = self.get_live_client()
+            if not client:
+                return False
+            instruction = self.build_system_instruction(mode, selection_context)
+            return client.start_session(instruction, timeout=2.0)
+        except Exception:
+            return False
+
+    def stream_live_chunk(self, pcm_16k_mono: bytes) -> bool:
+        """Feeds real-time audio chunk to live WebSocket session."""
+        if self.live_client and self.live_client.is_connected():
+            return self.live_client.send_audio_chunk(pcm_16k_mono)
+        return False
+
+    def cancel_live_session(self):
+        """Cancels live WebSocket session on abort or error."""
+        if self.live_client:
+            self.live_client.cancel()
+
+    @staticmethod
+    def _clean_transcript(raw_text: str) -> str:
+        """Strips markdown fences, wrapping quotes, timestamps, and acoustic silence artifacts."""
+        if not raw_text:
+            return ""
+        text = raw_text.strip()
+        # Filter markdown code fences if wrapped
+        if text.startswith("```") and text.endswith("```"):
+            lines = text.splitlines()
+            if len(lines) >= 2:
+                text = "\n".join(lines[1:-1]).strip()
+        # Filter wrapping quotes
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            text = text[1:-1].strip()
+        # Filter timestamp hallucinations e.g. "00:00", "0:00", "00:00 - 00:01"
+        if re.match(r"^(\d{1,2}:\d{2})(\s*-\s*\d{1,2}:\d{2})?\.?$", text):
+            return ""
+        # Filter silence/noise marker strings
+        if text.lower() in SILENCE_ARTIFACTS:
+            return ""
+        return text
+
+    def transcribe_audio(self, audio_wav_bytes: bytes, mode: str = None, selection_context: str = None) -> Tuple[str, float]:
+        start_time = time.time()
+
+        if not audio_wav_bytes or len(audio_wav_bytes) < 1000:
+            return "", 0.0
+
+        # Tier 1: Real-time Gemini Live WebSocket stream (<300ms)
+        if self.live_client and self.live_client.is_connected():
+            try:
+                live_text, live_lat = self.live_client.finish_and_get_transcript(timeout=2.0)
+                cleaned = self._clean_transcript(live_text)
+                if cleaned:
+                    return cleaned, live_lat
+            except Exception:
+                pass
+
+        # Tier 2: Resilient HTTP REST generateContent Fallback
+        api_key = self.config.get("google_api_key", "").strip()
+        if not api_key:
+            raise ValueError("Google AI Studio API Key is missing! Please configure it in Settings.")
+
+        system_instruction = self.build_system_instruction(mode, selection_context)
 
         audio_b64 = base64.b64encode(audio_wav_bytes).decode("utf-8")
         models_to_try = [self.working_model] + [m for m in FALLBACK_MODELS if m != self.working_model]

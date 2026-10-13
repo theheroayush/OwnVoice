@@ -156,7 +156,7 @@ fun MeetingModeScreen(
             }
             isSendingToPc = false
             if (success) {
-                Toast.makeText(context, "Saved to PC Documents/OwnVoice_Notes!", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Saved to PC Documents/OwnVoice/Meetings!", Toast.LENGTH_LONG).show()
             } else {
                 Toast.makeText(context, "Could not reach PC. Notes copied to phone clipboard instead.", Toast.LENGTH_SHORT).show()
                 copyMarkdownToClipboard()

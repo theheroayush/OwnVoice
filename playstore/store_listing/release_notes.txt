@@ -1,0 +1,7 @@
+What's new in OwnVoice 2.5.6 (Build 17):
+• Calibrated Two-Thumb Typing: Re-engineered pointer event hitboxes and touch-slop hysteresis to eliminate accidental character bleeding during ultra-fast typing.
+• Obsidian Linear-Grade Theme: Purged default palette in favor of deep obsidian dark theme (#0B0F17) with refined cobalt accents and high-contrast typography.
+• Low-Latency Air-Typing: Multi-threaded local Wi-Fi bridge streaming voice and keystrokes directly into PC text fields with zero cursor lag.
+• Meeting Mode Sync: Automatic markdown export and synchronization directly into PC Documents/OwnVoice/Meetings folder.
+• Enhanced Privacy Controls: Local API key encryption with Android Keystore and one-tap history purging.
+• De-cluttered Toolbar: Dedicated tools drawer for trackpad and remote controls.

@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 import socket
 import json
 import time
@@ -31,9 +31,34 @@ class TestBridgeDiscovery(unittest.TestCase):
         data, addr = s.recvfrom(2048)
         resp = json.loads(data.decode("utf-8"))
         self.assertEqual(resp.get("service"), "ownvoice-bridge")
+        self.assertEqual(resp.get("status"), "available")
+        self.assertEqual(resp.get("port"), self.server.port)
         self.assertEqual(resp.get("pin"), self.server.current_pin)
         self.assertEqual(resp.get("token"), self.server.pairing_token)
         s.close()
+
+    def test_tcp_subnet_sweep_status_probe(self):
+        import urllib.request
+        url = f"http://127.0.0.1:{self.server.port}/status"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(data.get("status"), "ready")
+            self.assertEqual(data.get("service"), "ownvoice-bridge")
+            self.assertEqual(data.get("port"), self.server.port)
+            self.assertEqual(data.get("pin"), self.server.current_pin)
+            self.assertEqual(data.get("token"), self.server.pairing_token)
+
+    def test_tcp_subnet_sweep_ping_probe(self):
+        import urllib.request
+        url = f"http://127.0.0.1:{self.server.port}/ping"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertEqual(data.get("status"), "available")
+            self.assertEqual(data.get("service"), "ownvoice-bridge")
 
 if __name__ == '__main__':
     unittest.main()

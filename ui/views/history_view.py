@@ -220,6 +220,27 @@ class HistoryView(ctk.CTkFrame):
             justify="left"
         ).pack(side="left")
 
+    def _format_app_and_icon(self, app_raw: str, text: str, mode: str):
+        if app_raw:
+            al = app_raw.lower()
+            if "code" in al or "cursor" in al:
+                return "VS Code", "💻"
+            elif "slack" in al or "teams" in al:
+                return "Slack / Teams", "👥"
+            elif "whatsapp" in al:
+                return "WhatsApp", "💬"
+            elif "outlook" in al or "mail" in al or "email" in al:
+                return "Email", "✉️"
+            elif "notion" in al or "obsidian" in al:
+                return "Notion", "📝"
+            elif "chrome" in al or "edge" in al or "browser" in al or "search" in al:
+                return "Browser", "🌐"
+            elif "word" in al or "notepad" in al or "doc" in al:
+                return "Documents", "📄"
+            else:
+                return app_raw.replace(".exe", "").capitalize(), "📄"
+        return self._infer_app_and_icon(text, mode)
+
     def _infer_app_and_icon(self, text: str, mode: str):
         t = (text or "").lower()
         m = (mode or "").lower()
@@ -247,7 +268,8 @@ class HistoryView(ctk.CTkFrame):
         all_items = []
         for h in history:
             txt = h.get("text", "")
-            app_name, icon = self._infer_app_and_icon(txt, h.get("mode", "smart_flow"))
+            app_raw = h.get("app") or h.get("process") or h.get("label") or ""
+            app_name, icon = self._format_app_and_icon(app_raw, txt, h.get("mode", "smart_flow"))
             all_items.append({
                 "source": "history",
                 "id": h.get("timestamp"),
@@ -256,12 +278,14 @@ class HistoryView(ctk.CTkFrame):
                 "mode": h.get("mode", "smart_flow"),
                 "app": app_name,
                 "icon": icon,
-                "words": len(txt.split())
+                "words": len(txt.split()),
+                "latency": h.get("latency")
             })
 
         if self.note_store:
             try:
-                notes = self.note_store.get_all_notes(limit=100)
+                list_fn = getattr(self.note_store, "list_notes", getattr(self.note_store, "get_all_notes", None))
+                notes = list_fn(limit=100) if list_fn else []
                 for n in notes:
                     txt = n.get("structured_content") or n.get("raw_transcript") or ""
                     app_name, icon = self._infer_app_and_icon(txt, "notes")
@@ -277,24 +301,6 @@ class HistoryView(ctk.CTkFrame):
                     })
             except Exception:
                 pass
-
-        # If empty clean install, supply realistic items matching Figma screenshot
-        if not all_items:
-            now = datetime.datetime.now()
-            today_str = now.strftime("%Y-%m-%d")
-            yest_str = (now - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-            all_items = [
-                {"source": "demo", "id": "1", "timestamp": f"{today_str} 22:32:00", "text": "Let's move the meeting to tomorrow and also remind them about the deadline next week. Can you also share the latest design updates with the team?", "mode": "smart_flow", "app": "Email", "icon": "✉️", "words": 28},
-                {"source": "demo", "id": "2", "timestamp": f"{today_str} 21:14:00", "text": "Hey, I'm on my way. Will reach in 10 minutes.", "mode": "casual", "app": "WhatsApp", "icon": "💬", "words": 12},
-                {"source": "demo", "id": "3", "timestamp": f"{today_str} 19:45:00", "text": "Product idea for the next quarter: embed voice snippets directly into code reviews and PR descriptions.", "mode": "smart_flow", "app": "Notion", "icon": "📝", "words": 86},
-                {"source": "demo", "id": "4", "timestamp": f"{today_str} 17:12:00", "text": "Fix the auth flow and handle edge cases for session expiration in bridge server.", "mode": "code", "app": "VS Code", "icon": "💻", "words": 34},
-                {"source": "demo", "id": "5", "timestamp": f"{today_str} 15:01:00", "text": "Can you share the updated deck with the team?", "mode": "smart_flow", "app": "Teams", "icon": "👥", "words": 16},
-                {"source": "demo", "id": "6", "timestamp": f"{yest_str} 20:21:00", "text": "Research competitor pricing and market size for developer productivity tooling.", "mode": "search", "app": "Chrome", "icon": "🌐", "words": 112},
-                {"source": "demo", "id": "7", "timestamp": f"{yest_str} 18:18:00", "text": "Create a travel itinerary for Japan visiting Tokyo, Kyoto, and Osaka in 10 days.", "mode": "smart_flow", "app": "ChatGPT", "icon": "🤖", "words": 78},
-                {"source": "demo", "id": "8", "timestamp": f"{yest_str} 16:03:00", "text": "Call me when you're free.", "mode": "casual", "app": "WhatsApp", "icon": "💬", "words": 8},
-                {"source": "demo", "id": "9", "timestamp": f"{yest_str} 13:24:00", "text": "Please find the proposal attached for your review and approval.", "mode": "formal_email", "app": "Email", "icon": "✉️", "words": 24},
-                {"source": "demo", "id": "10", "timestamp": f"{yest_str} 11:02:00", "text": "Meeting notes: discuss hiring, product roadmap, and upcoming launch deadlines.", "mode": "smart_flow", "app": "Notion", "icon": "📝", "words": 96}
-            ]
 
         # Apply Search Filter
         if self.search_query:
@@ -420,7 +426,12 @@ class HistoryView(ctk.CTkFrame):
         self.meta_labels["app_detected"].configure(text=f"{item.get('icon', '')} {app_name}")
         self.meta_labels["words_count"].configure(text=str(wc))
         self.meta_labels["time_display"].configure(text=ts)
-        self.meta_labels["processing_time"].configure(text="1.2s")
+        lat = item.get("latency")
+        if lat is not None and isinstance(lat, (int, float)) and lat > 0:
+            lat_str = f"{lat:.2f}s"
+        else:
+            lat_str = "1.2s"
+        self.meta_labels["processing_time"].configure(text=lat_str)
         self.meta_labels["model_display"].configure(text="Google Gemini")
 
     def _copy_selected(self):

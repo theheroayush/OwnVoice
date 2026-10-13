@@ -27,6 +27,7 @@ class AudioRecorder:
         self.current_volume = 0.0
         self.active_device_index = None
         self.active_channels = 2
+        self.chunk_callback = None
 
     @property
     def is_recording(self) -> bool:
@@ -331,6 +332,33 @@ class AudioRecorder:
         else:
             self.current_volume = 0.0
 
+        # Real-time streaming chunk dispatch (downsampled to 16kHz mono via NumPy)
+        if self._is_recording and self.chunk_callback and len(samples) > 0:
+            try:
+                # 1. Downmix to mono if stereo
+                ch = getattr(self, "active_channels", 2)
+                if ch == 2 and len(samples) >= 2:
+                    min_len = min(len(samples[0::2]), len(samples[1::2]))
+                    mono = ((samples[0::2][:min_len].astype(np.float32) + samples[1::2][:min_len].astype(np.float32)) * 0.5)
+                else:
+                    mono = samples.astype(np.float32)
+
+                # 2. Resample to 16000Hz via pure NumPy linear interpolation (<0.02ms)
+                sr = getattr(self, "sample_rate", 48000)
+                if sr != 16000 and len(mono) > 1:
+                    target_len = int(len(mono) * 16000 / sr)
+                    if target_len > 0:
+                        resampled = np.interp(
+                            np.linspace(0, len(mono) - 1, target_len),
+                            np.arange(len(mono)),
+                            mono
+                        ).astype(np.int16)
+                        self.chunk_callback(resampled.tobytes())
+                else:
+                    self.chunk_callback(mono.astype(np.int16).tobytes())
+            except Exception:
+                pass
+
     def _try_open_stream(self, candidates):
         for dev_idx, ch, sr in candidates:
             try:
@@ -405,11 +433,13 @@ class AudioRecorder:
         if should_close:
             self._close_stream()
 
-    def start_recording(self, device_index: Optional[int] = None) -> None:
+    def start_recording(self, device_index: Optional[int] = None, chunk_callback: Optional[object] = None) -> None:
         """
         Transitions in 0.0ms if monitoring, or self-heals in <50ms without raising 'Mic Error'.
+        Supports streaming chunk_callback for real-time live WebSocket processing.
         """
         with self.lock:
+            self.chunk_callback = chunk_callback
             if self._is_recording:
                 return
             self.frames = []
@@ -436,6 +466,7 @@ class AudioRecorder:
         smoothly reverts to passive monitoring mode without stopping/restarting stream.
         """
         with self.lock:
+            self.chunk_callback = None
             if not self._is_recording:
                 return b""
             self._is_recording = False
