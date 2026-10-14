@@ -1,107 +1,55 @@
-# Privacy Policy for OwnVoice
+# OwnVoice Privacy Policy
 
-**Effective Date:** October 14, 2026  
-**Last Updated:** October 14, 2026  
-**Website:** [https://ownvoice.in](https://ownvoice.in)  
-**Repository:** [https://github.com/theheroayush/OwnVoice](https://github.com/theheroayush/OwnVoice)  
-**Developer Contact:** `support@ownvoice.in`
+Effective date: 14 October 2026
+Last updated: 14 October 2026
 
----
+OwnVoice provides an Android voice keyboard, optional floating dictation and meeting notes, and optional connections to a user's computer. This policy describes the Android app. For questions, contact support@ownvoice.in.
 
-## 1. Introduction & Core Privacy Philosophy
+## Information processed by OwnVoice
 
-OwnVoice ("we", "our", or "us") provides a cross-platform voice productivity ecosystem comprising the **OwnVoice Android IME Keyboard & Voice Companion**, the **OwnVoice Desktop Hub**, and the **OwnVoice Web Platform**.
+### Voice audio and text
 
-Our core operating principle is simple: **Your voice, keystrokes, and thoughts belong solely to you.**  
-OwnVoice is engineered from the ground up as a privacy-first, zero-retention utility. We do not sell your data, we do not monetize your personal information, and we do not bundle third-party behavioral advertising or tracking SDKs.
+When you start dictation, meeting transcription or another voice feature, OwnVoice records audio through the microphone and sends the audio to the Google Gemini API over HTTPS using the Google API key configured in the app. When you ask the app to reshape text, the selected text and your instruction are sent to that API. Google processes those requests under the terms and privacy practices that apply to the API key you use. Google may retain or otherwise process requests under those terms; OwnVoice cannot control or promise Google's retention practices.
 
----
+The app may keep transcripts, notes, snippets, vocabulary and preferences in app-private storage on your device. You can clear local history and settings in the app. Android backup is disabled for the app.
 
-## 2. Information We Handle and How It Is Used
+### Accessibility auto-typing
 
-### A. Audio and Voice Recordings
-* **Purpose**: Used exclusively to transcribe spoken words into text and format them according to your selected tone or context (e.g., Email, Code, Concise, Notes).
-* **Processing**: Voice audio is captured in high-fidelity (48kHz) and processed ephemerally in volatile memory (RAM). Audio is streamed over encrypted TLS 1.3 connections directly to the AI transcription service (e.g., Google Gemini, OpenAI Whisper, Groq, or Anthropic).
-* **Retention**: Raw voice recordings are never stored on our servers. Once transcription is complete, the in-memory audio buffers are immediately purged.
+Accessibility auto-typing is optional. Before the app opens Android Accessibility settings, it displays a separate disclosure and asks you to agree. If enabled, the service observes the active app and focused editable field so it can insert a transcript after you tap the floating bubble. It may inspect the focused field's existing text to preserve that field's contents when inserting text. It excludes password fields. These accessibility observations are processed on the device and are not sent to OwnVoice. The transcript itself may be sent to Google Gemini when you use a voice feature. You can decline the disclosure or disable the service in Android settings.
 
-### B. Transcribed Notes and Dictation History
-* **Local Storage**: Your transcribed notes, meeting minutes, and recent snippets are stored strictly **locally on your device** (in private application storage or SQLite database).
-* **Control**: You have full control over your history. You can view, search, export to Markdown, or permanently delete individual items or the entire database at any time in Settings.
+### Optional GitHub Gist sync
 
-### C. Bring Your Own Key (BYOK) & Credentials
-* **Security**: If you supply an API key (e.g., Google Gemini, Groq, OpenAI), it is stored securely on your device using hardware-backed **Android Keystore** and `EncryptedSharedPreferences`.
-* **Zero Plaintext Transmission**: Your keys are used solely for direct communication with the AI provider's official API endpoints. They are never transmitted to any third-party intermediary or logged.
+If you choose to use cloud sync, OwnVoice sends the vocabulary, snippets and settings selected for sync to GitHub's Gist API using a GitHub token that you provide. Newly created Gists are private. An existing Gist keeps its existing visibility. GitHub handles the data under its own terms. Remove synced content from GitHub if you want it deleted there; clearing app data does not delete a Gist.
 
----
+### Optional phone-to-PC connection
 
-## 3. Android Permissions & Prominent Disclosures
+If you pair the app with the OwnVoice desktop companion, the app can send dictated text, keyboard input, clipboard text and trackpad commands to the paired PC or a relay endpoint you configure. These features are user-initiated. Local companion and custom relay connections may use cleartext HTTP or WebSocket protocols; they are not universally encrypted by OwnVoice. Only pair with a device and network you trust.
 
-To deliver seamless voice typing, floating dictation, and laptop synchronization, OwnVoice requests the following permissions on Android. Each permission is strictly scoped to its stated functionality:
+### Credentials and local settings
 
-| Permission | Purpose & Scope |
-| :--- | :--- |
-| `RECORD_AUDIO` | Required to capture your spoken voice for real-time transcription and Meeting Mode. Never activates without your explicit touch action. |
-| `BIND_ACCESSIBILITY_SERVICE` | **Prominent Disclosure**: The `OverlayAccessibilityService` is used solely to detect active, editable text input fields and inject transcribed text hands-free when you tap the Floating Bubble widget. It **does NOT** read passwords, log keystrokes, collect credit card details, capture screen contents, or transmit personal data. |
-| `SYSTEM_ALERT_WINDOW` | Enables the optional floating microphone capsule overlay so you can trigger voice dictation over any third-party app without switching keyboards. |
-| `FOREGROUND_SERVICE` & `FOREGROUND_SERVICE_MICROPHONE` | Required by Android OS to show an active, dismissible notification status bar icon while recording meetings or active voice sessions. |
-| `ACCESS_NETWORK_STATE` & `ACCESS_WIFI_STATE` | Used solely for local Wi-Fi peer discovery (UDP port 8766 / TCP port 8765) to connect your phone to your laptop for Air-Typing. |
-| `CHANGE_WIFI_MULTICAST_STATE` | Used on local Wi-Fi networks to broadcast and receive zero-configuration desktop pairing signals. |
-| `VIBRATE` | Provides subtle haptic feedback on key presses and recording initiation. |
-| `POST_NOTIFICATIONS` | Displays the status of ongoing meeting recordings or active desktop link connections. |
+The Google API key and optional GitHub, pairing and relay credentials are encrypted with Android Keystore where supported and stored in app-private preferences. Other settings and local history are stored in app-private storage. Credentials are sent to the corresponding provider or endpoint when you use the associated feature.
 
----
+## Permissions
 
-## 4. Cross-Device Air-Typing & Local Network Communication
+- Microphone: capture audio when you start a voice or meeting feature.
+- Accessibility Service: identify the active app and focused non-password field for optional transcript insertion, only after in-app disclosure and consent.
+- Display over other apps: show the optional floating dictation bubble.
+- Camera: scan a pairing QR code when you choose that flow; image data is used locally for pairing.
+- Notifications and foreground service: show the system notification while microphone recording is active.
+- Network and Wi-Fi: communicate with Google, GitHub when sync is used, and your paired PC or configured relay.
 
-OwnVoice features **Air-Typing**, enabling your phone to act as a wireless studio microphone and remote keyboard for your computer:
-* **Private Subnet Only**: Communication between your phone and laptop occurs over your local Wi-Fi network (LAN) using a secure 6-digit PIN and rotating authentication token.
-* **No Cloud Snooping**: Keystrokes, mouse trackpad coordinates, and meeting notes transferred between your devices never route through public relay servers when connected on the same Wi-Fi network.
-* **Optional Zero-Knowledge Cloud Relay**: If you choose to connect over different networks, communication is end-to-end tokenized and ephemeral.
+## Data retention and deletion
 
----
+OwnVoice has no user account or OwnVoice-operated transcription server. Local history and settings remain on the device until cleared in the app or the app is uninstalled. Deleting local data does not remove information already sent to Google, GitHub or a configured relay. Their retention and deletion are governed by their respective terms and tools. Revoke API tokens with the provider if needed.
 
-## 5. Third-Party Service Providers
+## Advertising and sale
 
-OwnVoice interfaces with the following AI APIs based on the provider you configure:
-* **Google Gemini API**: Subject to Google's Cloud API Terms & Data Privacy.
-* **OpenAI API / Groq / Anthropic**: Subject to their respective commercial API privacy terms (commercial enterprise API policies generally state that API data is not used to train models).
+The Android app does not contain advertising. OwnVoice does not sell personal information. The app sends information to third-party providers only when you use features that require those providers, as described above.
 
-OwnVoice does not integrate advertising SDKs, data brokers, or third-party behavioral analytics tools (such as Facebook SDK, AppsFlyer, or Google AdMob).
+## Children
 
----
+The app is intended for users aged 18 and over and is not designed for children.
 
-## 6. Data Retention, Export & Deletion Rights
+## Changes
 
-You have complete sovereignty over your data:
-1. **Immediate Deletion**: In the Android app, navigate to **Settings → Privacy & History → Clear Data** to permanently purge all local logs, notes, and cached tokens.
-2. **Key Revocation**: You can remove or replace your API keys at any moment with a single tap.
-3. **App Uninstall**: Uninstalling the OwnVoice application automatically deletes all sandboxed databases and preferences from your device.
-
----
-
-## 7. Children's Privacy (COPPA Compliance)
-
-OwnVoice is a productivity and utility tool intended for general audiences and knowledge workers. We do not knowingly collect or solicit personal data from children under the age of 13. If you believe a child has provided us with personal information, please contact us immediately for prompt deletion.
-
----
-
-## 8. International Data Privacy Compliance (GDPR & CCPA)
-
-* **European Economic Area (GDPR)**: Processing of audio and text is grounded on your explicit consent (when activating the microphone). Because data is stored locally on your device and ephemeral in transit, you retain rights to access, portability, and erasure.
-* **California Residents (CCPA / CPRA)**: We do not sell or share personal information with third parties for monetary or commercial consideration.
-
----
-
-## 9. Changes to This Privacy Policy
-
-We may update this Privacy Policy periodically to reflect new features or regulatory requirements. Any updates will be published to our repository at [https://github.com/theheroayush/OwnVoice/blob/main/PRIVACY_POLICY.md](https://github.com/theheroayush/OwnVoice/blob/main/PRIVACY_POLICY.md) and on our website at [https://ownvoice.in/privacy](https://ownvoice.in/privacy).
-
----
-
-## 10. Contact Us
-
-If you have questions, feedback, or inquiries regarding this Privacy Policy or your data, please contact:
-
-* **Email:** `support@ownvoice.in`
-* **Website:** [https://ownvoice.in](https://ownvoice.in)
-* **GitHub Issues:** [https://github.com/theheroayush/OwnVoice/issues](https://github.com/theheroayush/OwnVoice/issues)
+Material policy changes will be posted at this URL. For privacy questions, contact support@ownvoice.in.
