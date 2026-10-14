@@ -537,8 +537,8 @@ private fun Step2MicPermission(
                 icon = Icons.Filled.CheckCircle,
                 iconTint = DesignTokens.StatusGreen,
                 iconBg = DesignTokens.StatusGreen.copy(alpha = 0.15f),
-                title = "Completely private",
-                desc = "Your audio is processed securely. We don't store your voice without your consent."
+                title = "You choose when to dictate",
+                desc = "Voice audio is sent to Google Gemini over HTTPS for transcription under Google's API terms."
             )
             Spacer(modifier = Modifier.height(10.dp))
             PermissionCard(

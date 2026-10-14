@@ -40,7 +40,6 @@ fun VoiceSettingsScreen(
     var language by remember { mutableStateOf(app.secureConfig.language) }
     var languageExpanded by remember { mutableStateOf(false) }
 
-    var voiceModelTier by remember { mutableStateOf(app.secureConfig.voiceModelTier) }
     var speakingStyle by remember { mutableStateOf(app.secureConfig.speakingStyle) }
     var inputSensitivity by remember { mutableFloatStateOf(app.secureConfig.inputSensitivity) }
 
@@ -73,12 +72,6 @@ fun VoiceSettingsScreen(
         "Spanish",
         "French",
         "German"
-    )
-
-    val modelOptions = listOf(
-        PillOption("fast", "Fast", "Ultra low latency"),
-        PillOption("balanced", "Balanced", "Best accuracy & speed"),
-        PillOption("high_quality", "High Quality", "Deep reasoning")
     )
 
     val styleOptions = listOf(
@@ -257,7 +250,7 @@ fun VoiceSettingsScreen(
                 }
             }
 
-            // Card 2: Voice Model Tier
+            // Card 2: Transcription service
             item {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -287,29 +280,18 @@ fun VoiceSettingsScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Voice Model Tier",
+                                    text = "Transcription service",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = "Gemini 3.6 Flash reasoning depth",
+                                    text = "Google Gemini models are selected automatically",
                                     fontSize = 11.sp,
                                     color = DesignTokens.Colors.TextMuted
                                 )
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        SegmentedPillSelector(
-                            options = modelOptions,
-                            selectedId = voiceModelTier,
-                            onOptionSelected = {
-                                voiceModelTier = it
-                                app.secureConfig.voiceModelTier = it
-                            }
-                        )
                     }
                 }
             }

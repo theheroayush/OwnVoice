@@ -2,19 +2,34 @@ package com.example.ownvoice.theme
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 object DesignTokens {
-    // Primary Surfaces
+    // Primary Surfaces (Obsidian Dark)
     val ObsidianBg = Color(0xFF0B0F17)
     val CardBg = Color(0xFF131926)
-    val CardBgElevated = Color(0xFF1E293B)
+    val CardBgElevated = Color(0xFF131926)
     val CardBorder = Color(0xFF1E293B)
-    val CardBorderSubtle = Color(0xFF26334D)
+    val CardBorderSubtle = Color(0xFF26324D)
 
-    // Brand Accents
+    // Keycap & Keyboard Tokens
+    val KeycapBg = Color(0xFF1E293B)
+    val KeycapBorder = Color(0xFF26324D)
+    val KeycapPressed = Color(0xFF2A384F)
+    val KeycapBgPressed = KeycapPressed
+    val KeycapAccentBg = Color(0xFF2563EB).copy(alpha = 0.25f)
+    val KeycapActionEnterBg = Color(0xFF2563EB)
+    val KeycapGlyph = Color(0xFFF8FAFC)
+    val KeycapSubscript = Color(0xFF94A3B8)
+
+    // Brand & Status Accents
     val PrimaryBlue = Color(0xFF2563EB)
+    val AccentSky = Color(0xFF38BDF8)
+    val SkyAccent = AccentSky
     val ElectricBlue = Color(0xFF3B82F6)
     val GlowBlue = Color(0xFF007AFF)
     val CyanAccent = Color(0xFF06B6D4)
@@ -23,12 +38,61 @@ object DesignTokens {
     val PurpleAccent = Color(0xFF8B5CF6)
     val AmberAccent = Color(0xFFF59E0B)
     val RedAccent = Color(0xFFEF4444)
+    val RecordingPulse = Color(0xFFEF4444)
 
-    // Text Tokens
-    val TextPrimary = Color(0xFFFFFFFF)
-    val TextSecondary = Color(0xFFE2E8F0)
-    val TextMuted = Color(0xFF94A3B8)
+    // High-Legibility Text Tokens (WCAG AA & AAA compliant)
+    val TextPrimary = Color(0xFFF8FAFC)
+    val TextSecondary = Color(0xFF94A3B8)
+    val TextMuted = Color(0xFF64748B)
     val TextSubtle = Color(0xFF64748B)
+
+    // Custom Typography Tokens
+    object TypographyTokens {
+        val KeycapGlyph = TextStyle(
+            fontFamily = FontFamily.Default,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.2.sp,
+            color = TextPrimary
+        )
+        val KeycapAction = TextStyle(
+            fontFamily = FontFamily.Default,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.1.sp,
+            color = TextPrimary
+        )
+        val ChipLabel = TextStyle(
+            fontFamily = FontFamily.Default,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.2.sp,
+            color = TextPrimary
+        )
+        val ChipLabelSmall = TextStyle(
+            fontFamily = FontFamily.Default,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.3.sp,
+            color = TextSecondary
+        )
+        val SubscriptHint = TextStyle(
+            fontFamily = FontFamily.Default,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.sp,
+            color = TextSecondary
+        )
+        val SubscriptNumber = TextStyle(
+            fontFamily = FontFamily.Default,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.sp,
+            color = TextSecondary
+        )
+        // Backwards-compatibility alias
+        val KeycapSubscript = SubscriptHint
+    }
 
     // Colors Sub-Object for unified consumption
     object Colors {
@@ -38,8 +102,9 @@ object DesignTokens {
         val BorderSubtle = CardBorderSubtle
         val PrimaryBlue = DesignTokens.PrimaryBlue
         val PrimaryLightBlue = ElectricBlue
+        val AccentSky = DesignTokens.AccentSky
         val StatusReady = StatusGreen
-        val StatusRecording = RedAccent
+        val StatusRecording = RecordingPulse
         val TextPrimary = DesignTokens.TextPrimary
         val TextSecondary = DesignTokens.TextSecondary
         val TextMuted = DesignTokens.TextMuted

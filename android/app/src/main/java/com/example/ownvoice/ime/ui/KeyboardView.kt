@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ownvoice.ime.model.ActionKeyType
 import com.example.ownvoice.ime.model.ClipboardItem
 import com.example.ownvoice.ime.model.KeyboardLayoutMode
+import com.example.ownvoice.theme.DesignTokens
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.sin
@@ -116,17 +117,17 @@ fun KeyboardView(
     onDeleteClip: (String) -> Unit = {},
     onSendClipToPc: (String) -> Unit = {}
 ) {
-    // Google Gboard Material You Dark Theme Color Tokens
-    val gboardBg = Color(0xFF0E1320)           // Deep Midnight Navy Background
-    val keyBg = Color(0xFF1F273B)              // Translucent Slate Navy Letter Keys
-    val keyBorder = Color(0xFF26324D)          // Subtle Key Outline
-    val accentKeyBg = Color(0xFF244CA8)        // Rich Cobalt Blue Accent Keys (Shift, Backspace, ?123, Period)
-    val actionEnterBg = Color(0xFF1D54D8)      // Vibrant Royal Blue Action / Search / Enter Key
-    val micButtonGlow = Color(0xFF2563EB)      // Circular Mic Highlight
-    val textWhite = Color(0xFFF0F4F8)          // Crisp Primary White Glyph
-    val subscriptGray = Color(0xFF8A99B5)      // Top-Right Number Subscript
-    val toolbarIconTint = Color(0xFFBAC7DE)    // Top Toolbar Glyphs
-    val accentRed = Color(0xFFFF453A)          // Recording indicator
+    // OwnVoice Obsidian Design System Palette derived from DesignTokens
+    val gboardBg = DesignTokens.ObsidianBg                  // #0B0F17
+    val keyBg = DesignTokens.KeycapBg                       // #1E293B
+    val keyBorder = DesignTokens.KeycapBorder               // #26324D
+    val accentKeyBg = DesignTokens.KeycapAccentBg           // #2563EB with alpha
+    val actionEnterBg = DesignTokens.KeycapActionEnterBg     // #2563EB
+    val micButtonGlow = DesignTokens.PrimaryBlue            // #2563EB
+    val textWhite = DesignTokens.TextPrimary                // #F8FAFC
+    val subscriptGray = DesignTokens.TextSecondary          // #94A3B8
+    val toolbarIconTint = DesignTokens.TextSecondary        // #94A3B8
+    val accentRed = DesignTokens.RecordingPulse             // #EF4444
 
     var activeMagnifierChar by remember { mutableStateOf("") }
 
@@ -351,61 +352,31 @@ fun KeyboardView(
                                     }
                                 }
 
-                                // 4. Tone Pill
-                                item {
-                                    Surface(
-                                        color = if (activeTone != "smart_flow") accentKeyBg else keyBg,
-                                        shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, if (activeTone != "smart_flow") micButtonGlow else keyBorder),
-                                        modifier = Modifier.clickable { onToneCycle() }
-                                    ) {
-                                        Text(
-                                            text = "⚡ ${formatToneLabel(activeTone)}",
-                                            color = textWhite,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                        )
-                                    }
-                                }
+                                // 4. Dedicated Quick Tone Pills Suite
+                                val availableTones = listOf(
+                                    Triple("smart_flow", "⚡ Smart Flow", "Smart Flow"),
+                                    Triple("formal_email", "💼 Email", "Formal Email"),
+                                    Triple("chat", "💬 Chat", "Chat"),
+                                    Triple("code", "💻 Code", "Code"),
+                                    Triple("bullet_notes", "📝 Bullets", "Bullet Notes"),
+                                    Triple("translate_hindi", "🌐 Hindi", "Hindi Translation"),
+                                    Triple("search", "🔍 Search", "Web Search")
+                                )
 
-                                // 5. Search Pill
-                                item {
-                                    val isSearch = activeTone == "search"
+                                items(availableTones) { (toneId, label, _) ->
+                                    val isCurrentTone = activeTone == toneId
                                     Surface(
-                                        color = if (isSearch) accentKeyBg else keyBg,
+                                        color = if (isCurrentTone) accentKeyBg else keyBg,
                                         shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, if (isSearch) micButtonGlow else keyBorder),
-                                        modifier = Modifier.clickable { onToneSelect(if (isSearch) "smart_flow" else "search") }
+                                        border = BorderStroke(1.dp, if (isCurrentTone) micButtonGlow else keyBorder),
+                                        modifier = Modifier.clickable {
+                                            onToneSelect(if (isCurrentTone && toneId != "smart_flow") "smart_flow" else toneId)
+                                        }
                                     ) {
                                         Text(
-                                            text = "🔍 Search",
-                                            color = if (isSearch) Color.White else toolbarIconTint,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                        )
-                                    }
-                                }
-
-                                // 6. Hindi Pill
-                                item {
-                                    val isHindi = activeTone == "translate_hindi"
-                                    Surface(
-                                        color = if (isHindi) accentKeyBg else keyBg,
-                                        shape = RoundedCornerShape(16.dp),
-                                        border = BorderStroke(1.dp, if (isHindi) micButtonGlow else keyBorder),
-                                        modifier = Modifier.clickable { onToneSelect(if (isHindi) "smart_flow" else "translate_hindi") }
-                                    ) {
-                                        Text(
-                                            text = "🌐 Hindi",
-                                            color = if (isHindi) Color.White else toolbarIconTint,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium,
+                                            text = label,
+                                            color = if (isCurrentTone) textWhite else toolbarIconTint,
+                                            style = DesignTokens.TypographyTokens.ChipLabel,
                                             maxLines = 1,
                                             softWrap = false,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -437,11 +408,11 @@ fun KeyboardView(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    // Right: Circular Glowing Blue Microphone Button
+                    // Right: Circular Amplitude-Reactive Microphone Button
                     val infiniteTransition = rememberInfiniteTransition(label = "micPulse")
                     val pulseScale by infiniteTransition.animateFloat(
                         initialValue = 1.0f,
-                        targetValue = 1.12f,
+                        targetValue = 1.15f,
                         animationSpec = infiniteRepeatable(
                             animation = tween(durationMillis = 800, easing = FastOutSlowInEasing),
                             repeatMode = RepeatMode.Reverse
@@ -449,24 +420,40 @@ fun KeyboardView(
                         label = "micPulseAnim"
                     )
 
+                    val activeAmp = amplitude.coerceIn(0f, 1f)
+                    val dynamicPulseScale = if (state == KeyboardState.RECORDING) {
+                        pulseScale + (activeAmp * 0.40f)
+                    } else {
+                        1.0f
+                    }
+
                     Box(
                         modifier = Modifier.size(42.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         if (state == KeyboardState.RECORDING) {
+                            // Outer ambient halo reacting to decibels
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .scale(pulseScale)
+                                    .size(42.dp)
+                                    .scale(dynamicPulseScale * 1.25f)
                                     .clip(CircleShape)
-                                    .background(accentRed.copy(alpha = 0.35f))
+                                    .background(accentRed.copy(alpha = 0.20f))
+                            )
+                            // Inner acoustic ripple
+                            Box(
+                                modifier = Modifier
+                                    .size(39.dp)
+                                    .scale(dynamicPulseScale)
+                                    .clip(CircleShape)
+                                    .background(accentRed.copy(alpha = 0.45f))
                             )
                         }
 
                         Surface(
                             shape = CircleShape,
                             color = if (state == KeyboardState.RECORDING) accentRed else actionEnterBg,
-                            shadowElevation = 4.dp,
+                            shadowElevation = if (state == KeyboardState.RECORDING) 6.dp else 3.dp,
                             modifier = Modifier
                                 .size(38.dp)
                                 .clickable { onToggleRecording() }
@@ -1195,14 +1182,16 @@ private fun GboardKey(
     onClick: () -> Unit
 ) {
     var isPressed by remember { mutableStateOf(false) }
-    val effectiveBg = if (isPressed) keyBg.copy(alpha = 0.72f) else keyBg
+    val effectiveKeyBg = if (isPressed) DesignTokens.KeycapPressed else keyBg
     val density = LocalDensity.current
     val touchSlopPx = with(density) { 20.dp.toPx() }
     val releaseMarginPx = with(density) { 8.dp.toPx() }
 
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = effectiveBg,
+        color = effectiveKeyBg,
+        shadowElevation = if (isPressed) 0.dp else 1.5.dp,
+        border = BorderStroke(0.5.dp, DesignTokens.KeycapBorder),
         modifier = modifier
             .height(height)
             .pointerInput(char, onClick, onLongPress) {
@@ -1294,16 +1283,14 @@ private fun GboardKey(
             Text(
                 text = char,
                 color = textColor,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Normal
+                style = DesignTokens.TypographyTokens.KeycapGlyph
             )
 
             if (subscript != null) {
                 Text(
                     text = subscript,
                     color = subscriptColor,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
+                    style = DesignTokens.TypographyTokens.SubscriptNumber,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(top = 2.dp, end = 4.dp)

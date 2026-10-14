@@ -2,8 +2,16 @@ package com.example.ownvoice.core
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 data class HistoryItem(
     val id: String,
@@ -19,7 +27,10 @@ class SecureConfig(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "ownvoice_secure_prefs"
+        private const val SECRET_KEY_ALIAS = "ownvoice_local_secrets_v1"
+        private const val ENCRYPTED_SECRET_PREFIX = "enc:v1:"
         private const val KEY_API_KEY = "google_api_key"
+        private const val KEY_ACCESSIBILITY_DISCLOSURE_ACCEPTED = "accessibility_disclosure_accepted"
         private const val KEY_DICTATION_MODE = "dictation_mode"
         private const val KEY_CUSTOM_INSTRUCTIONS = "custom_instructions"
         private const val KEY_FLOATING_BUBBLE = "floating_bubble_enabled"
@@ -72,12 +83,12 @@ class SecureConfig(context: Context) {
         set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_NAME, value.trim()).apply()
 
     var desktopBridgeToken: String
-        get() = prefs.getString(KEY_DESKTOP_BRIDGE_TOKEN, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_TOKEN, value.trim()).apply()
+        get() = getSecret(KEY_DESKTOP_BRIDGE_TOKEN)
+        set(value) = putSecret(KEY_DESKTOP_BRIDGE_TOKEN, value)
 
     var desktopBridgePin: String
-        get() = prefs.getString(KEY_DESKTOP_BRIDGE_PIN, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_DESKTOP_BRIDGE_PIN, value.trim()).apply()
+        get() = getSecret(KEY_DESKTOP_BRIDGE_PIN)
+        set(value) = putSecret(KEY_DESKTOP_BRIDGE_PIN, value)
 
     var hasCompletedOnboarding: Boolean
         get() = prefs.getBoolean("has_completed_onboarding", false)
@@ -144,8 +155,8 @@ class SecureConfig(context: Context) {
         set(value) = prefs.edit().putFloat(KEY_TRACKPAD_SENSITIVITY, value).apply()
 
     var relayRoomToken: String
-        get() = prefs.getString(KEY_RELAY_ROOM_TOKEN, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_RELAY_ROOM_TOKEN, value.trim()).apply()
+        get() = getSecret(KEY_RELAY_ROOM_TOKEN)
+        set(value) = putSecret(KEY_RELAY_ROOM_TOKEN, value)
 
     fun getPinnedClips(): List<String> {
         val jsonStr = prefs.getString(KEY_PINNED_CLIPS_JSON, "[]") ?: "[]"
@@ -168,16 +179,74 @@ class SecureConfig(context: Context) {
     }
 
     var gistToken: String
-        get() = prefs.getString(KEY_GIST_TOKEN, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_GIST_TOKEN, value.trim()).apply()
+        get() = getSecret(KEY_GIST_TOKEN)
+        set(value) = putSecret(KEY_GIST_TOKEN, value)
 
     var gistId: String
         get() = prefs.getString(KEY_GIST_ID, "") ?: ""
         set(value) = prefs.edit().putString(KEY_GIST_ID, value.trim()).apply()
 
     var apiKey: String
-        get() = prefs.getString(KEY_API_KEY, "")?.trim() ?: ""
-        set(value) = prefs.edit().putString(KEY_API_KEY, value.trim()).apply()
+        get() = getSecret(KEY_API_KEY)
+        set(value) = putSecret(KEY_API_KEY, value)
+
+    var accessibilityDisclosureAccepted: Boolean
+        get() = prefs.getBoolean(KEY_ACCESSIBILITY_DISCLOSURE_ACCEPTED, false)
+        set(value) = prefs.edit().putBoolean(KEY_ACCESSIBILITY_DISCLOSURE_ACCEPTED, value).apply()
+
+    private fun getSecret(key: String): String {
+        val stored = prefs.getString(key, null) ?: return ""
+        if (stored.startsWith(ENCRYPTED_SECRET_PREFIX)) {
+            return runCatching { decryptSecret(stored.removePrefix(ENCRYPTED_SECRET_PREFIX)) }.getOrDefault("")
+        }
+        putSecret(key, stored)
+        return stored
+    }
+
+    private fun putSecret(key: String, value: String) {
+        val cleaned = value.trim()
+        if (cleaned.isEmpty()) {
+            prefs.edit().remove(key).apply()
+            return
+        }
+        val encrypted = encryptSecret(cleaned)
+        prefs.edit().putString(key, ENCRYPTED_SECRET_PREFIX + encrypted).apply()
+    }
+
+    private fun encryptSecret(value: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
+        val ciphertext = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        val combined = cipher.iv + ciphertext
+        return Base64.encodeToString(combined, Base64.NO_WRAP)
+    }
+
+    private fun decryptSecret(encoded: String): String {
+        val combined = Base64.decode(encoded, Base64.NO_WRAP)
+        require(combined.size > 12) { "Stored secret is invalid" }
+        val iv = combined.copyOfRange(0, 12)
+        val ciphertext = combined.copyOfRange(12, combined.size)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, getOrCreateSecretKey(), GCMParameterSpec(128, iv))
+        return cipher.doFinal(ciphertext).toString(Charsets.UTF_8)
+    }
+
+    private fun getOrCreateSecretKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (keyStore.getKey(SECRET_KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        generator.init(
+            KeyGenParameterSpec.Builder(
+                SECRET_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setRandomizedEncryptionRequired(true)
+                .build()
+        )
+        return generator.generateKey()
+    }
 
     var dictationMode: String
         get() = prefs.getString(KEY_DICTATION_MODE, "smart_flow") ?: "smart_flow"

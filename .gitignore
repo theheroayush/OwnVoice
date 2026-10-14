@@ -4,6 +4,8 @@
 config.json
 *.pem
 *.key
+*.jks
+*.keystore
 
 # Local Data & SQLite
 *.db

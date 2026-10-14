@@ -83,6 +83,7 @@ fun HomeScreen(
     val heroOrbState = when (voiceState) {
         is VoiceAssistantState.Recording -> MicOrbState.LISTENING
         is VoiceAssistantState.Processing -> MicOrbState.PROCESSING
+        is VoiceAssistantState.Success -> MicOrbState.SUCCESS
         else -> MicOrbState.IDLE
     }
 

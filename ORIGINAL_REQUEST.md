@@ -87,3 +87,72 @@ Integrity mode: development
 - [ ] Android IME keyboard registers accurate keystrokes during rapid typing test without adjacent key bleeding.
 - [ ] Zero Android Studio default purple theme colors in active Compose themes.
 - [ ] Phone-to-PC Air-Typing and Meeting Mode file transfer pass end-to-end verification.
+
+
+## 2026-10-14T07:58:27Z
+
+Redesign the OwnVoice Android Mobile Application (IME voice keyboard, floating bubble overlay, companion screens, typography, and theme system) to match top-tier consumer standards (inspired by Wispr Flow, Superwhisper, and Linear) with modern font styling, cohesive Obsidian dark theming, fluid spring animations, tactile micro-interactions, and zero functionality degradation.
+
+Working directory: c:\Users\ayush\OneDrive\Documents\ownvoice
+Integrity mode: development
+
+## Requirements
+
+### R1. Typography & Theme System Overhaul
+- Establish a modern, high-grade typographical system in 'Type.kt' and 'DesignTokens.kt' with clean font weights, tracking/letter-spacing, and clear visual hierarchy (Display, Title, Body, Keycap Glyphs, Chip Labels, Subscript Numbers).
+- Upgrade the Obsidian theme palette ('#0B0F17' base, '#131926' elevated card surfaces, '#1E293B' border outlines, '#2563EB' / '#38BDF8' accent highlights, '#F8FAFC' primary high-legibility text, '#94A3B8' secondary text) across 'Color.kt', 'DesignTokens.kt', and 'Theme.kt'.
+- Ensure strict contrast ratios meeting WCAG AA standards for both dark and ambient lighting conditions.
+
+### R2. Android IME Keyboard UI/UX Overhaul
+- Redesign the primary keyboard layout and top toolbar in 'KeyboardView.kt' with the updated typography, elevated keycap depth, subtle tactile pressed states, and sleek Material You / Wispr-style aesthetic.
+- Replace static microphone iconography with an interactive acoustic pulse ring and amplitude-reactive visualizer directly on the voice input pill.
+- Upgrade the quick tone selector (Smart Flow, Email, Chat, Code, Hindi/English) with an intuitive, scrollable pill bar, clean font hierarchy, and instant haptic feedback.
+- Preserve all existing touch-calibration geometry (calibrated 'touchSlopPx', 'releaseMarginPx', pointer ID isolation) so rapid two-thumb typing remains 100% accurate.
+- Maintain existing glide typing, backspace scrub gesture, clipboard history drawer, and emoji picker workflows.
+
+### R3. Ambient Floating Bubble HUD (Wispr Flow Style)
+- Redesign 'FloatingBubbleService.kt' to transform the floating bubble from a basic static shape into an ambient, modern capsule HUD.
+- Implement smooth edge-snapping spring physics and dragging affordances.
+- Add an animated acoustic waveform / pulsating halo during voice recording that reacts to audio state and amplitude instead of a static red fill.
+- Add a smooth quick-mode indicator chip (Auto-Context, Meeting, Notes, Translate) accessible via quick gesture.
+- Guarantee that background text injection via 'OverlayAccessibilityService.kt' and 'FloatingBubbleService.kt' remains completely unbroken.
+
+### R4. Modern Companion App Screens & Navigation
+- Modernize 'HomeScreen.kt', 'SettingsScreen.kt', 'HistoryPrivacyScreen.kt', and 'MeetingModeScreen.kt' with clean glassmorphic card containers, consistent typography, and refined status pills.
+- Enhance 'HeroMicOrb.kt' with layered concentric ambient ripples, dynamic spring easing, and distinct visual states for Idle, Listening, Processing, and Success.
+- Ensure the Bottom Navigation bar ('BottomNavBar.kt') and status cards reflect the polished theme and typography.
+
+### R5. Zero Regression & Functional Verification
+- Maintain complete backwards compatibility for all core functionality: 48kHz audio streaming, Gemini Live WebSocket and REST fallbacks, UDP broadcast discovery (port 8766), TCP bridge commands to PC, and SQLite history persistence.
+- Execute automated Gradle unit tests and assemble an installable debug APK verifying zero compilation or runtime regressions.
+
+## Verification Resources
+- Existing Unit Test: 'android/app/src/test/java/com/example/ownvoice/ime/KeyboardLayoutSpecTest.kt'
+- Existing Test Suite: 'tests/test_live_bridge_and_phone_link.py'
+- Android Manifest & Permissions: 'android/app/src/main/AndroidManifest.xml'
+- Gradle Toolchain: Configured with JDK 17 at 'C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot'
+
+## Acceptance Criteria
+
+### Typography & Theme
+- [ ] 'Type.kt' and 'DesignTokens.kt' provide a unified typographical scale with modern tracking and font styling.
+- [ ] Theme palette is strictly unified on dark obsidian tokens with high-contrast text and zero default template colors.
+
+### Keyboard UI & Voice Bar
+- [ ] Keyboard surface displays modern obsidian palette with elevated keycaps and crisp typography.
+- [ ] Microphone trigger features dynamic amplitude-reactive pulse animations during voice dictation.
+- [ ] Tone selector chips toggle cleanly with visible active highlights and zero layout shifts.
+- [ ] Rapid typing tests and character key layout tests pass without adjacent key bleed or dropped strokes.
+
+### Floating Bubble HUD
+- [ ] Floating bubble renders with modern capsule styling, refined borders, and smooth edge snapping.
+- [ ] Active recording state displays an acoustic waveform/pulsing halo with instant state feedback for processing and completion.
+- [ ] Direct text injection via accessibility service into third-party target apps functions cleanly.
+
+### Companion Screens & Navigation
+- [ ] Home, Settings, History, and Meeting Mode screens adhere to unified typography and design tokens.
+- [ ] Hero Mic Orb displays smooth spring-animated ripples across Idle, Listening, and Processing states.
+
+### Build & Integrity Verification
+- [ ] 'gradlew.bat testDebugUnitTest' passes 100% of unit tests.
+- [ ] 'gradlew.bat assembleDebug' succeeds, producing a valid APK package in 'android/app/build/outputs/apk/debug/'.

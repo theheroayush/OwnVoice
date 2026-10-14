@@ -57,6 +57,8 @@ class FloatingBubbleService : Service() {
     private var isRecording = false
     private var isProcessing = false
     private var activeSessionToneOverride: String? = null
+    private var pulseAnimator: android.animation.ValueAnimator? = null
+    private var modeBadgeView: TextView? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -135,12 +137,12 @@ class FloatingBubbleService : Service() {
             setPadding(12, 12, 12, 12)
         }
 
-        // Capsule background
+        // Capsule background with Obsidian dark styling
         val capsule = FrameLayout(this).apply {
             val bg = android.graphics.drawable.GradientDrawable().apply {
                 shape = android.graphics.drawable.GradientDrawable.OVAL
-                setColor(0xEE1A1A1E.toInt())
-                setStroke(3, 0xFF33333E.toInt())
+                setColor(0xEE0B0F17.toInt())
+                setStroke(3, 0xFF1E293B.toInt())
             }
             background = bg
             layoutParams = FrameLayout.LayoutParams(130, 130)
@@ -149,7 +151,7 @@ class FloatingBubbleService : Service() {
         // Inner App Icon Logo
         val micIcon = ImageView(this).apply {
             setImageResource(R.drawable.ic_bubble_icon)
-            val lp = FrameLayout.LayoutParams(92, 92).apply {
+            val lp = FrameLayout.LayoutParams(84, 84).apply {
                 gravity = Gravity.CENTER
             }
             layoutParams = lp
@@ -158,14 +160,29 @@ class FloatingBubbleService : Service() {
         // Loading spinner
         val spinner = ProgressBar(this).apply {
             visibility = View.GONE
-            val lp = FrameLayout.LayoutParams(70, 70).apply {
+            val lp = FrameLayout.LayoutParams(64, 64).apply {
                 gravity = Gravity.CENTER
             }
             layoutParams = lp
         }
 
+        // Active Quick Mode Chip
+        val modeBadge = TextView(this).apply {
+            text = "AUTO"
+            textSize = 8f
+            setTextColor(0xFF94A3B8.toInt())
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = 6
+            }
+            layoutParams = lp
+        }
+        modeBadgeView = modeBadge
+
         capsule.addView(micIcon)
         capsule.addView(spinner)
+        capsule.addView(modeBadge)
         rootLayout.addView(capsule)
 
         // Touch & Drag Handling with Snapping and Long-Press Quick Tone
@@ -213,7 +230,7 @@ class FloatingBubbleService : Service() {
                                 handleBubbleClick(capsule, micIcon, spinner)
                             }
                         } else {
-                            // Snap to edge
+                            // Smooth Spring Edge Snap
                             snapToEdge(params, rootLayout)
                             app.secureConfig.bubbleX = params.x
                             app.secureConfig.bubbleY = params.y
@@ -247,6 +264,16 @@ class FloatingBubbleService : Service() {
         val (nextTone, label) = tones[nextIndex]
         activeSessionToneOverride = nextTone
         vibrate(60)
+        val badgeLabel = when (nextTone) {
+            null -> "AUTO"
+            "bullet_notes" -> "NOTES"
+            "translate_hindi" -> "HINDI"
+            "translate_english" -> "ENG"
+            "code" -> "CODE"
+            "formal_email" -> "MAIL"
+            else -> "MODE"
+        }
+        modeBadgeView?.text = badgeLabel
         Toast.makeText(this, "Quick Mode: $label", Toast.LENGTH_SHORT).show()
     }
 
@@ -255,8 +282,20 @@ class FloatingBubbleService : Service() {
         val size = Point()
         display.getSize(size)
         val screenWidth = size.x
-        params.x = if (params.x < screenWidth / 2) 20 else screenWidth - 150
-        windowManager?.updateViewLayout(view, params)
+        val targetX = if (params.x < screenWidth / 2) 20 else screenWidth - 150
+        val startX = params.x
+
+        val animator = android.animation.ValueAnimator.ofInt(startX, targetX).apply {
+            duration = 240
+            interpolator = android.view.animation.DecelerateInterpolator(1.4f)
+            addUpdateListener { va ->
+                params.x = va.animatedValue as Int
+                try {
+                    windowManager?.updateViewLayout(view, params)
+                } catch (ignored: Exception) {}
+            }
+        }
+        animator.start()
     }
 
     private fun handleBubbleClick(capsule: FrameLayout, micIcon: ImageView, spinner: ProgressBar) {
@@ -288,9 +327,22 @@ class FloatingBubbleService : Service() {
                     try { toneGenerator?.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 35) } catch (ignored: Exception) {}
                 }
                 (capsule.background as? android.graphics.drawable.GradientDrawable)?.apply {
-                    setColor(0xEEFF453A.toInt())
-                    setStroke(4, 0xFFFF453A.toInt())
+                    setColor(0xEEEF4444.toInt())
+                    setStroke(4, 0xFF38BDF8.toInt())
                 }
+                pulseAnimator?.cancel()
+                pulseAnimator = android.animation.ValueAnimator.ofFloat(1.0f, 1.14f).apply {
+                    duration = 750
+                    repeatMode = android.animation.ValueAnimator.REVERSE
+                    repeatCount = android.animation.ValueAnimator.INFINITE
+                    interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+                    addUpdateListener { va ->
+                        val scale = va.animatedValue as Float
+                        capsule.scaleX = scale
+                        capsule.scaleY = scale
+                    }
+                }
+                pulseAnimator?.start()
             } else {
                 vibrate(120)
                 Toast.makeText(this, "Microphone is busy or locked by another app", Toast.LENGTH_SHORT).show()
@@ -300,6 +352,9 @@ class FloatingBubbleService : Service() {
             // Stop and transcribe
             isRecording = false
             isProcessing = true
+            pulseAnimator?.cancel()
+            capsule.scaleX = 1.0f
+            capsule.scaleY = 1.0f
             vibrate(40)
             if (app.secureConfig.isSoundEffectsEnabled) {
                 try { toneGenerator?.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 40) } catch (ignored: Exception) {}
@@ -308,8 +363,8 @@ class FloatingBubbleService : Service() {
             micIcon.visibility = View.GONE
             spinner.visibility = View.VISIBLE
             (capsule.background as? android.graphics.drawable.GradientDrawable)?.apply {
-                setColor(0xEE1E1E24.toInt())
-                setStroke(3, 0xFF0A84FF.toInt())
+                setColor(0xEE131926.toInt())
+                setStroke(3, 0xFF2563EB.toInt())
             }
 
             val activePkg = OverlayAccessibilityService.getActiveAppPackage()
@@ -395,9 +450,12 @@ class FloatingBubbleService : Service() {
                     isProcessing = false
                     micIcon.visibility = View.VISIBLE
                     spinner.visibility = View.GONE
+                    pulseAnimator?.cancel()
+                    capsule.scaleX = 1.0f
+                    capsule.scaleY = 1.0f
                     (capsule.background as? android.graphics.drawable.GradientDrawable)?.apply {
-                        setColor(0xEE1A1A1E.toInt())
-                        setStroke(3, 0xFF33333E.toInt())
+                        setColor(0xEE0B0F17.toInt())
+                        setStroke(3, 0xFF1E293B.toInt())
                     }
                 }
             }
@@ -417,6 +475,8 @@ class FloatingBubbleService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        pulseAnimator?.cancel()
+        pulseAnimator = null
         serviceScope.cancel()
         audioRecorder.cancelRecording()
         try {

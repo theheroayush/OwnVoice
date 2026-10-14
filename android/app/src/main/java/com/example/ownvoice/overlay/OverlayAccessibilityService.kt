@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import com.example.ownvoice.core.SecureConfig
 
 class OverlayAccessibilityService : AccessibilityService() {
 
@@ -41,6 +42,11 @@ class OverlayAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (!SecureConfig(this).accessibilityDisclosureAccepted) {
+            lastFocusedNode?.recycle()
+            lastFocusedNode = null
+            return
+        }
         if (event == null) return
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
@@ -58,7 +64,7 @@ class OverlayAccessibilityService : AccessibilityService() {
                         currentForegroundPackage = pkg
                     }
                     val source = event.source ?: return
-                    if (source.isEditable || source.isFocused) {
+                    if (!source.isPassword && (source.isEditable || source.isFocused)) {
                         lastFocusedNode = AccessibilityNodeInfo.obtain(source)
                     }
                 } catch (ignored: Exception) {}
@@ -82,6 +88,9 @@ class OverlayAccessibilityService : AccessibilityService() {
     }
 
     fun performInjection(text: String): InjectionOutcome {
+        if (!SecureConfig(this).accessibilityDisclosureAccepted) {
+            return InjectionOutcome.CLIPBOARD_ONLY
+        }
         // Always copy to system clipboard as universal fallback
         try {
             val clipMgr = getSystemService(ClipboardManager::class.java)
@@ -127,7 +136,7 @@ class OverlayAccessibilityService : AccessibilityService() {
         try {
             rootInActiveWindow?.let { root ->
                 val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                if (focused != null && (focused.isEditable || focused.isFocused)) {
+                if (focused != null && !focused.isPassword && (focused.isEditable || focused.isFocused)) {
                     return focused
                 }
                 val anyFocused = findFocusedEditableInTree(root)
@@ -142,7 +151,7 @@ class OverlayAccessibilityService : AccessibilityService() {
             for (window in sortedWindows) {
                 val root = window.root ?: continue
                 val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                if (focused != null && (focused.isEditable || focused.isFocused)) {
+                if (focused != null && !focused.isPassword && (focused.isEditable || focused.isFocused)) {
                     return focused
                 }
                 val anyFocused = findFocusedEditableInTree(root)
@@ -154,19 +163,8 @@ class OverlayAccessibilityService : AccessibilityService() {
         try {
             lastFocusedNode?.let { cached ->
                 cached.refresh()
-                if (cached.isEditable && cached.isVisibleToUser) {
+                if (cached.isEditable && !cached.isPassword && cached.isVisibleToUser) {
                     return AccessibilityNodeInfo.obtain(cached)
-                }
-            }
-        } catch (ignored: Exception) {}
-
-        // 4. Fallback: Search all application windows for ANY editable node
-        try {
-            for (window in windows) {
-                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
-                    val root = window.root ?: continue
-                    val firstEditable = findAnyEditableInTree(root)
-                    if (firstEditable != null) return firstEditable
                 }
             }
         } catch (ignored: Exception) {}
@@ -175,7 +173,10 @@ class OverlayAccessibilityService : AccessibilityService() {
     }
 
     private fun findFocusedEditableInTree(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if ((node.isEditable || node.className?.contains("EditText", ignoreCase = true) == true) && (node.isFocused || node.isSelected)) {
+        if (!node.isPassword &&
+            (node.isEditable || node.className?.contains("EditText", ignoreCase = true) == true) &&
+            (node.isFocused || node.isSelected)
+        ) {
             return AccessibilityNodeInfo.obtain(node)
         }
         for (i in 0 until node.childCount) {
@@ -188,17 +189,4 @@ class OverlayAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun findAnyEditableInTree(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isEditable || node.className?.contains("EditText", ignoreCase = true) == true) {
-            return AccessibilityNodeInfo.obtain(node)
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            val found = findAnyEditableInTree(child)
-            if (found != null) {
-                return found
-            }
-        }
-        return null
-    }
 }

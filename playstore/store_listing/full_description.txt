@@ -1,48 +1,31 @@
-Speak your thoughts at the speed of mind. OwnVoice is the executive-grade AI voice keyboard, wireless PC studio mic, and autonomous meeting assistant built for modern professionals, writers, founders, and developers.
+OwnVoice is a voice keyboard for Android. Dictate into text fields, shape text with Google Gemini, capture meeting notes, or use your phone as a microphone and input companion for your PC.
 
-Whether you are replying to messages, drafting long-form documents, writing code, or recording business meetings, OwnVoice eliminates typing fatigue with whisper-accurate voice transcription and instant tone transformation.
+VOICE KEYBOARD
+• Dictate with the OwnVoice keyboard and review your transcript before using it.
+• Choose a writing tone or ask Gemini to reshape text you select.
+• Build custom vocabulary and snippets for names and phrases you use often.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚀 THREE MODES IN ONE APP
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FLOATING DICTATION
+• Start dictation from the optional floating bubble.
+• Optional Accessibility auto-typing can insert a transcript into the focused text field after you review and agree to its in-app disclosure. It excludes password fields. You can leave this feature disabled.
 
-1. THE NATIVE AI VOICE KEYBOARD
-• Full replacement for your standard keyboard with Obsidian Linear-grade design tokens.
-• Two-thumb calibrated touch targets with zero misfires or dropped strokes during rapid typing.
-• Continuous hands-free voice dictation with automatic smart punctuation, capitalization, and paragraphing.
-• Instant tone switching: Clean Polish, Professional, Concise, Bullet Points, or Raw Dictation.
-• Quick Snippets & Custom Vocabulary: Expand custom abbreviations and acronyms instantly.
+MEETING NOTES
+• Start and stop a recording when you choose.
+• Send audio to Google Gemini to create a transcript or notes. Results and recent history are stored on your device until you clear them.
+• Get permission from meeting participants where appropriate before recording.
 
-2. AIR-TYPING: WIRELESS STUDIO MIC FOR YOUR LAPTOP / PC
-• Connects to your Windows PC over local Wi-Fi in under 3 seconds with zero configuration (UDP 8766 discovery).
-• Turn your phone's studio microphone into a remote input device: speak on your phone and watch words type directly into your computer cursor in real time.
-• Works seamlessly with VS Code, Word, Chrome, Slack, Notion, Google Docs, and coding IDEs.
-• Cross-device clipboard sync: push and pull clipboard text between your phone and laptop with a single tap.
+PHONE AND PC
+• Pair with the OwnVoice desktop companion over your selected network.
+• Send dictated text, keyboard input, trackpad commands or clipboard text to the paired computer when you use those features.
+• Optional sync sends selected vocabulary, snippets and settings to GitHub Gist using a token you provide.
 
-3. AUTONOMOUS MEETING STUDIO & NOTES SYNC
-• Record meetings, interviews, or lectures in high-fidelity 48kHz audio.
-• Automatically synthesizes spoken conversations into structured executive summaries, key decisions, and prioritized action items.
-• Syncs markdown meeting minutes directly to your PC Documents folder (Documents/OwnVoice/Meetings).
-• Local-first: all notes and transcripts are saved in on-device SQLite storage.
+DATA AND PERMISSIONS
+• Voice audio and text you ask Gemini to process are sent to Google over HTTPS. Google handles those requests under its own terms and retention practices; OwnVoice does not control Google's retention.
+• Google and GitHub API credentials are stored encrypted with Android Keystore where supported. Other preferences and history are stored in app-private storage on the device.
+• Accessibility is optional. Before enabling it, OwnVoice explains the active-app and focused-field access used to insert dictated text. The service does not send its accessibility observations to OwnVoice.
+• PC and clipboard features send the content or commands you choose to your paired PC or configured relay. Check the destination and network before using them.
+• OwnVoice does not include advertising.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔒 PRIVACY-FIRST & ZERO-RETENTION ARCHITECTURE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• Zero Ad Networks: We do not sell your personal data, track your behavior across apps, or inject advertisements.
-• Bring Your Own Key (BYOK): Connect your own Google Gemini, OpenAI, Groq, or Anthropic API key. Pay wholesale prices (~$0.001 per note) with zero markups or recurring subscriptions.
-• Hardware-Backed Security: Stored API keys are encrypted on-device using Android Keystore and EncryptedSharedPreferences.
-• Ephemeral Audio: Voice buffers are processed in volatile memory (RAM) and immediately purged after transcription. No audio is ever stored on third-party servers.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚙️ PERMISSIONS & TRANSPARENCY DISCLOSURE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• Microphone (RECORD_AUDIO): Required for voice transcription, air-typing, and meeting recording. Only active when you initiate voice input.
-• Accessibility Service: The optional Overlay Accessibility Service is used solely to detect editable input fields and paste transcribed text hands-free when using the Floating Bubble mode. It NEVER reads passwords, logs keystrokes, tracks screens, or collects personal data.
-• Local Network (Wi-Fi): Used strictly for local subnet peer-to-peer pairing between your phone and computer for Air-Typing.
-
-Learn more and download the companion desktop hub:
-Website: https://ownvoice.in
-Privacy Policy: https://github.com/theheroayush/OwnVoice/blob/main/PRIVACY_POLICY.md
 Support: support@ownvoice.in
+Website: https://ownvoice.in
+Privacy policy: https://github.com/theheroayush/OwnVoice/blob/main/PRIVACY_POLICY.md

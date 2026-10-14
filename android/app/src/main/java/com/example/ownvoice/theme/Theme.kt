@@ -14,30 +14,36 @@ import androidx.compose.ui.platform.LocalContext
 private val DarkColorScheme =
   darkColorScheme(
     primary = DesignTokens.PrimaryBlue,
+    onPrimary = DesignTokens.TextPrimary,
+    primaryContainer = DesignTokens.KeycapPressed,
+    onPrimaryContainer = DesignTokens.TextPrimary,
     secondary = DesignTokens.ElectricBlue,
-    tertiary = DesignTokens.CyanAccent,
+    onSecondary = DesignTokens.TextPrimary,
+    secondaryContainer = DesignTokens.KeycapBg,
+    onSecondaryContainer = DesignTokens.TextPrimary,
+    tertiary = DesignTokens.AccentSky,
+    onTertiary = DesignTokens.ObsidianBg,
+    tertiaryContainer = DesignTokens.AccentSky.copy(alpha = 0.2f),
+    onTertiaryContainer = DesignTokens.TextPrimary,
     background = DesignTokens.ObsidianBg,
-    surface = DesignTokens.CardBg,
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
     onBackground = DesignTokens.TextPrimary,
+    surface = DesignTokens.CardBg,
     onSurface = DesignTokens.TextPrimary,
+    surfaceVariant = DesignTokens.KeycapBg,
+    onSurfaceVariant = DesignTokens.TextSecondary,
+    outline = DesignTokens.CardBorder,
+    outlineVariant = DesignTokens.CardBorderSubtle,
+    error = DesignTokens.RecordingPulse,
+    onError = Color.White,
+    errorContainer = DesignTokens.RecordingPulse.copy(alpha = 0.2f),
+    onErrorContainer = DesignTokens.RecordingPulse,
+    surfaceTint = DesignTokens.PrimaryBlue,
+    inverseSurface = DesignTokens.TextPrimary,
+    inverseOnSurface = DesignTokens.ObsidianBg,
   )
 
-private val LightColorScheme =
-  lightColorScheme(
-    primary = DesignTokens.PrimaryBlue,
-    secondary = DesignTokens.ElectricBlue,
-    tertiary = DesignTokens.CyanAccent,
-    background = DesignTokens.ObsidianBg,
-    surface = DesignTokens.CardBg,
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = DesignTokens.TextPrimary,
-    onSurface = DesignTokens.TextPrimary,
-  )
+private val LightColorScheme = DarkColorScheme
+
 
 @Composable
 fun OwnVoiceTheme(

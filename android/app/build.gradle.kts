@@ -11,16 +11,22 @@ android {
         applicationId = "com.ownvoice.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 17
-        versionName = "2.5.6"
+        versionCode = 19
+        versionName = "2.5.8"
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.keystore")
-            storePassword = "ownvoice123"
-            keyAlias = "ownvoice"
-            keyPassword = "ownvoice123"
+            val uploadStoreFile = providers.gradleProperty("ownvoiceUploadStoreFile").orNull
+            val uploadStorePassword = providers.gradleProperty("ownvoiceUploadStorePassword").orNull
+            val uploadKeyAlias = providers.gradleProperty("ownvoiceUploadKeyAlias").orNull
+            val uploadKeyPassword = providers.gradleProperty("ownvoiceUploadKeyPassword").orNull
+            if (uploadStoreFile != null && uploadStorePassword != null && uploadKeyAlias != null && uploadKeyPassword != null) {
+                storeFile = file(uploadStoreFile)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
         }
     }
 

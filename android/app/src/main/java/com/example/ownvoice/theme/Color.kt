@@ -3,12 +3,26 @@ package com.example.ownvoice.theme
 import androidx.compose.ui.graphics.Color
 
 // Authentic OwnVoice Obsidian Design System Palette
-val Obsidian = Color(0xFF0B0F17)
-val CardDark = Color(0xFF131926)
-val CardSurfaceElevated = Color(0xFF1E293B)
-val CobaltBlue = Color(0xFF2563EB)
-val ElectricBlue = Color(0xFF3B82F6)
-val GlowBlue = Color(0xFF007AFF)
-val AccentGreen = Color(0xFF10B981)
-val AccentRed = Color(0xFFEF4444)
+// Rebound directly to DesignTokens single source of truth
+val Obsidian = DesignTokens.ObsidianBg
+val CardDark = DesignTokens.CardBg
+val CardSurfaceElevated = DesignTokens.CardBgElevated
+val CobaltBlue = DesignTokens.PrimaryBlue
+val ElectricBlue = DesignTokens.ElectricBlue
+val GlowBlue = DesignTokens.GlowBlue
+val AccentGreen = DesignTokens.StatusGreen
+val AccentRed = DesignTokens.RecordingPulse
+
+// Direct bindings for complete Obsidian theme cohesion
+val AccentSky = DesignTokens.AccentSky
+val SkyAccent = DesignTokens.SkyAccent
+val TextPrimary = DesignTokens.TextPrimary
+val TextSecondary = DesignTokens.TextSecondary
+val TextMuted = DesignTokens.TextMuted
+val TextSubtle = DesignTokens.TextSubtle
+val KeycapBg = DesignTokens.KeycapBg
+val KeycapBorder = DesignTokens.KeycapBorder
+val KeycapPressed = DesignTokens.KeycapPressed
+val RecordingPulse = DesignTokens.RecordingPulse
+
 

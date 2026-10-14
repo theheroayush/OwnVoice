@@ -1,0 +1,4 @@
+OwnVoice 2.5.8 (Build 19)
+• Clarified settings for PC connections and Gemini transcription.
+• Removed account-plan and device-count labels that did not reflect real account or connection data.
+• Improved onboarding disclosures and protection for local credentials.

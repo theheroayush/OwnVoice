@@ -1,41 +1,20 @@
 {
   "app_details": {
     "package_name": "com.ownvoice.app",
-    "version_code": 17,
-    "version_name": "2.5.6",
-    "app_title": "OwnVoice: AI Voice Keyboard",
-    "short_description": "Ultra-fast AI voice keyboard, wireless PC studio mic & smart meeting notes.",
+    "version_code": 18,
+    "version_name": "2.5.7",
+    "app_title": "OwnVoice - let you write",
+    "short_description": "Voice keyboard, PC dictation and meeting notes with Google Gemini.",
     "category": "PRODUCTIVITY",
-    "tags": [
-      "Productivity",
-      "Tools",
-      "Keyboard",
-      "Voice typing",
-      "Speech to text",
-      "Artificial Intelligence"
-    ],
-    "content_rating": "PEGI 3 / Everyone",
-    "target_audience": "18 and older"
+    "tags": ["Productivity", "Tools", "Keyboard", "Voice typing", "Speech to text"],
+    "target_audience": "18 and older",
+    "content_rating": "To be calculated in Play Console"
   },
   "contact_information": {
     "developer_name": "OwnVoice Technologies",
     "support_email": "support@ownvoice.in",
     "website_url": "https://ownvoice.in",
-    "privacy_policy_url": "https://github.com/theheroayush/OwnVoice/blob/main/PRIVACY_POLICY.md",
-    "privacy_policy_production_url": "https://ownvoice.in/privacy"
+    "privacy_policy_url": "https://github.com/theheroayush/OwnVoice/blob/main/PRIVACY_POLICY.md"
   },
-  "permissions_declared": [
-    "android.permission.RECORD_AUDIO",
-    "android.permission.BIND_ACCESSIBILITY_SERVICE",
-    "android.permission.SYSTEM_ALERT_WINDOW",
-    "android.permission.FOREGROUND_SERVICE",
-    "android.permission.FOREGROUND_SERVICE_MICROPHONE",
-    "android.permission.INTERNET",
-    "android.permission.ACCESS_NETWORK_STATE",
-    "android.permission.ACCESS_WIFI_STATE",
-    "android.permission.CHANGE_WIFI_MULTICAST_STATE",
-    "android.permission.POST_NOTIFICATIONS",
-    "android.permission.VIBRATE",
-    "android.permission.WAKE_LOCK"
-  ]
+  "data_destinations": ["Google Gemini API", "GitHub Gist when optional sync is used", "user-paired PC or user-configured relay"]
 }

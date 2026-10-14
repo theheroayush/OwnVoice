@@ -8,7 +8,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,8 +34,6 @@ fun SettingsScreen(
     val app = context.applicationContext as OwnVoiceApplication
 
     var searchQuery by remember { mutableStateOf("") }
-    var isPcConnected by remember { mutableStateOf(app.secureConfig.desktopBridgeIp.isNotBlank()) }
-
     val defaultIme = Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: ""
     val isOwnVoiceActiveIme = defaultIme.contains("ownvoice", ignoreCase = true)
 
@@ -56,66 +52,6 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold,
                     color = DesignTokens.Colors.TextPrimary
                 )
-            }
-
-            // User Profile Card (Ayush • Pro Plan)
-            item {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = DesignTokens.Colors.CardSurface,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, DesignTokens.Colors.BorderSubtle),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Avatar
-                        Surface(
-                            shape = CircleShape,
-                            color = DesignTokens.Colors.PrimaryBlue,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "A",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Ayush",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DesignTokens.Colors.TextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Personal • Pro Plan",
-                                fontSize = 12.sp,
-                                color = DesignTokens.Colors.TextMuted
-                            )
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = DesignTokens.Colors.PrimaryBlue.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = "ACTIVE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DesignTokens.Colors.PrimaryLightBlue,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
             }
 
             // Search Bar
@@ -253,24 +189,10 @@ fun SettingsScreen(
                         Column {
                             if (showDevices) {
                                 SettingsListItem(
-                                    title = "Connected Devices",
-                                    subtitle = "Manage computers and devices linked to your account",
+                                    title = "PC connection",
+                                    subtitle = "Set up or manage the OwnVoice desktop connection",
                                     icon = Icons.Default.Laptop,
                                     iconTint = DesignTokens.Colors.IconSquircleComputer,
-                                    trailing = {
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = if (isPcConnected) DesignTokens.Colors.StatusReady.copy(alpha = 0.15f) else DesignTokens.Colors.BorderSubtle
-                                        ) {
-                                            Text(
-                                                text = if (isPcConnected) "3 CONNECTED" else "2 CONNECTED",
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isPcConnected) DesignTokens.Colors.StatusReady else DesignTokens.Colors.TextMuted,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                            )
-                                        }
-                                    },
                                     onClick = { onNavigate(ScreenDestination.ConnectedDevices) }
                                 )
                             }

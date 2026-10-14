@@ -49,6 +49,7 @@ fun SnippetsScreen(
     var editExpansion by remember { mutableStateOf("") }
 
     var showRestrictedDialog by remember { mutableStateOf(false) }
+    var showAccessibilityDisclosure by remember { mutableStateOf(false) }
 
     val isA11yRunning = OverlayAccessibilityService.isRunning()
 
@@ -267,7 +268,7 @@ fun SnippetsScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                                    showAccessibilityDisclosure = true
                                 },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -280,7 +281,7 @@ fun SnippetsScreen(
                                     color = DesignTokens.Colors.TextPrimary
                                 )
                                 Text(
-                                    text = if (isA11yRunning) "Active • Types text automatically into focused fields" else "Disabled • Tap to enable in Android settings",
+                                    text = if (isA11yRunning) "Active • Types dictated text into a focused field" else "Optional • Review disclosure before enabling",
                                     fontSize = 12.sp,
                                     color = if (isA11yRunning) DesignTokens.Colors.StatusReady else DesignTokens.Colors.TextMuted
                                 )
@@ -502,6 +503,44 @@ fun SnippetsScreen(
             dismissButton = {
                 TextButton(onClick = { editingKey = null }) {
                     Text("Cancel", color = DesignTokens.Colors.TextMuted)
+                }
+            },
+            containerColor = DesignTokens.Colors.CardSurface
+        )
+    }
+
+    // Restricted Settings Dialog
+    if (showAccessibilityDisclosure) {
+        AlertDialog(
+            onDismissRequest = { showAccessibilityDisclosure = false },
+            title = {
+                Text(
+                    "Accessibility auto-typing",
+                    color = DesignTokens.Colors.TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    "If you agree and enable this optional feature, OwnVoice uses Android Accessibility to identify the active app and focused editable field, then insert the transcript when you tap the floating bubble. It may read the focused field's existing text to preserve it while inserting dictated text. Accessibility data is used on your device for this action and is not sent to OwnVoice. Dictation audio and any text you ask OwnVoice to process are sent to Google Gemini over HTTPS using your API key. You can decline, or turn this service off later in Android Accessibility settings.",
+                    color = DesignTokens.Colors.TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        app.secureConfig.accessibilityDisclosureAccepted = true
+                        showAccessibilityDisclosure = false
+                        context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DesignTokens.Colors.PrimaryBlue)
+                ) {
+                    Text("Agree and continue")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccessibilityDisclosure = false }) {
+                    Text("Decline", color = DesignTokens.Colors.TextMuted)
                 }
             },
             containerColor = DesignTokens.Colors.CardSurface
